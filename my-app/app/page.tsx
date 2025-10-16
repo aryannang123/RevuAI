@@ -14,10 +14,10 @@ export default function Home() {
       <LiquidChrome />
 
       {/* Overlay text */}
-      <div className="absolute inset-0 flex items-center justify-center text-white pointer-events-none">
+      <div className="absolute inset-0 flex items-center justify-center text-[ #0D0D0D] pointer-events-none">
         <SplitText
           text="REVU AI"
-          className="text-5xl font-bold text-center pointer-events-auto"
+          className="text-6xl font-bold text-center pointer-events-auto"
           delay={100}
           duration={0.6}
           ease="power3.out"
@@ -25,7 +25,7 @@ export default function Home() {
           from={{ opacity: 0, y: 40 }}
           to={{ opacity: 1, y: 0 }}
           threshold={0.1}
-          rootMargin="-100px"
+          rootMargin="-90px"
           textAlign="center"
           onLetterAnimationComplete={handleAnimationComplete}
         />
