@@ -14,7 +14,7 @@ export default function Home() {
       <LiquidChrome />
 
       {/* Overlay text */}
-      <div className="absolute inset-0 flex items-center justify-center text-white pointer-events-none">
+<div className="absolute inset-0 flex items-center justify-center text-[#7DF9FF] pointer-events-none">
         <SplitText
           text="REVU AI"
           className="text-5xl font-bold text-center pointer-events-auto"
