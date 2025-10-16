@@ -1,10 +1,12 @@
+"use client";
+
 import { useRef, useEffect } from 'react';
 import { Renderer, Program, Mesh, Triangle } from 'ogl';
 
 import './LiquidChrome.css';
 
 export const LiquidChrome = ({
-  baseColor = [0.1, 0.1, 0.1],
+  baseColor = [0, 0.1, 0.1],
   speed = 0.2,
   amplitude = 0.3,
   frequencyX = 3,
