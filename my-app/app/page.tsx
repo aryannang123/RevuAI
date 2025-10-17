@@ -2,24 +2,55 @@
 
 import LiquidChrome from "@/components/LiquidChrome";
 import SplitText from "@/components/SplitText";
+import GooeyNav from "@/components/GooeyNav";
 
 export default function Home() {
   const handleAnimationComplete = () => {
     console.log("All letters have animated!");
   };
 
+  const items = [
+    { label: "Home", href: "#" },
+    { label: "About", href: "#" },
+    { label: "Contact", href: "#" },
+  ];
+
   return (
     <main className="relative h-screen w-full overflow-hidden">
-      {/* Background effect */}
+      {/* Background */}
       <LiquidChrome />
 
-      {/* Overlay content */}
+      {/* ✅ Gooey Nav - top center, glassmorphic style */}
+      <div
+        className="absolute top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto
+                   rounded-2xl bg-white/10 backdrop-blur-lg border border-white/20
+                   shadow-[0_0_25px_rgba(255,255,255,0.15)] px-8 py-3"
+        style={{
+          height: "auto",
+          width: "fit-content",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <GooeyNav
+          items={items}
+          particleCount={15}
+          particleDistances={[90, 10]}
+          particleR={100}
+          initialActiveIndex={0}
+          animationTime={600}
+          timeVariance={300}
+          colors={[1, 2, 3, 1, 2, 3, 1, 4]}
+        />
+      </div>
+
+      {/* Centered main content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        {/* Slightly lowered text */}
         <div className="transform -translate-y-8">
           <SplitText
-            text="REVU AI"
-            className="text-6xl font-bold text-center text-[#0D0D0D] pointer-events-auto"
+            text="Rev AI"
+            className="text-6xl font-bold text-center text-white pointer-events-auto"
             delay={100}
             duration={0.6}
             ease="power3.out"
@@ -33,7 +64,6 @@ export default function Home() {
           />
         </div>
 
-        {/* Enlarged search bar */}
         <div className="mt-8 pointer-events-auto w-[420px] max-w-[90%]">
           <input
             type="text"
