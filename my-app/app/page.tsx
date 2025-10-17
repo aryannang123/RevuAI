@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import LiquidChrome from "@/components/LiquidChrome";
 import SplitText from "@/components/SplitText";
 import GooeyNav from "@/components/GooeyNav";
 
 export default function Home() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const handleAnimationComplete = () => {
     console.log("All letters have animated!");
   };
@@ -31,6 +34,47 @@ export default function Home() {
     <main className="relative h-screen w-full overflow-hidden">
       {/* Background */}
       <LiquidChrome />
+
+      {/* Hamburger menu - top left */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="absolute top-6 left-6 z-50 flex flex-col justify-between w-8 h-6 cursor-pointer pointer-events-auto"
+      >
+        <span
+          className={`block h-1 w-full bg-white rounded transition-all duration-300 ${
+            sidebarOpen ? "rotate-45 translate-y-2.5" : ""
+          }`}
+        ></span>
+        <span
+          className={`block h-1 w-full bg-white rounded transition-all duration-300 ${
+            sidebarOpen ? "opacity-0" : ""
+          }`}
+        ></span>
+        <span
+          className={`block h-1 w-full bg-white rounded transition-all duration-300 ${
+            sidebarOpen ? "-rotate-45 -translate-y-2.5" : ""
+          }`}
+        ></span>
+      </button>
+
+      {/* Vertical Sidebar */}
+      <div
+        className={`fixed top-0 left-0 h-full w-64 bg-white/10 backdrop-blur-lg border-r border-white/20 shadow-lg z-40 transform transition-transform duration-300 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <nav className="flex flex-col mt-20 space-y-6 px-6 text-white text-lg">
+          <a href="#" className="hover:text-cyan-400 transition-colors">
+            ASUS TUF A15
+          </a>
+          <a href="#" className="hover:text-cyan-400 transition-colors">
+            MACKBOOK M4 
+          </a>
+          <a href="#" className="hover:text-cyan-400 transition-colors">
+            VALORANT 
+          </a>
+        </nav>
+      </div>
 
       {/* ✅ Gooey Nav - top center, glassmorphic style */}
       <div
