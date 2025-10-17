@@ -23,7 +23,7 @@ export default function ContactPage() {
       name: "Aryan",
       github: "aryannang123",
       githubUrl: "https://github.com/aryannang123",
-      email: "ryannangarath407@gmail.com",
+      email: "aryannangarath407@gmail.com",
     },
     {
       name: "Amogh",
