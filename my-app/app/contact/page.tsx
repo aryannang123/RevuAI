@@ -17,6 +17,7 @@ export default function ContactPage() {
       github: "ESHWAR1024",
       githubUrl: "https://github.com/ESHWAR1024",
       email: "eshwar10245@gmail.com",
+      avatarUrl:"https://www.google.com/url?sa=i&url=https%3A%2F%2Fwap.shookaa.com%2F%3Fc77bac8%3D22_3603067_2_52&psig=AOvVaw2voG7Zql61sdknBRYWhuXX&ust=1760794784346000&source=images&cd=vfe&opi=89978449&ved=0CBUQjRxqFwoTCIiFgfCtq5ADFQAAAAAdAAAAABAT"
     },
     {
       name: "Aryan",
@@ -84,9 +85,9 @@ export default function ContactPage() {
               showUserInfo={true}
               enableTilt={true}
               enableMobileTilt={false}
-              avatarUrl={null}
-              iconUrl={null}
-              grainUrl={null}
+              avatarUrl={""}
+              iconUrl={""}
+              grainUrl={""}
               behindGradient={false}
               innerGradient={false}
               showBehindGradient={false}
