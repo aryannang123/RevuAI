@@ -32,7 +32,7 @@ export default function Home() {
     [sidebarSearch]
   );
 
-  // Use useMemo so that SplitText doesn’t re-render unnecessarily
+  // Your useMemo hook for SplitText is preserved
   const splitTextMemo = useMemo(
     () => (
       <SplitText
@@ -53,11 +53,12 @@ export default function Home() {
     [handleAnimationComplete]
   );
 
+  // ✅ UPDATE: Navigation links now point to the correct pages
   const items = useMemo(
     () => [
-      { label: "Home", href: "#" },
-      { label: "About", href: "#" },
-      { label: "Contact", href: "#" },
+      { label: "Home", href: "/" },
+      { label: "About", href: "/about" },
+      { label: "Contact", href: "/contact" },
     ],
     []
   );
@@ -66,7 +67,7 @@ export default function Home() {
     <main className="relative h-screen w-full overflow-hidden">
       <LiquidChrome />
 
-      {/* Hamburger / Cross button */}
+      {/* Hamburger / Cross button (No changes here) */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
         className="absolute top-6 left-6 z-50 flex flex-col justify-between w-8 h-6 cursor-pointer pointer-events-auto"
@@ -88,14 +89,13 @@ export default function Home() {
         ></span>
       </button>
 
-      {/* Sidebar */}
+      {/* Sidebar (No changes here) */}
       <div
         className={`fixed top-0 left-0 h-full w-64 bg-white/10 backdrop-blur-lg border-r border-white/20 shadow-lg z-40 transform transition-transform duration-300 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex flex-col px-6 pt-24 space-y-8 text-white">
-          {/* Search bar */}
           <div className="relative">
             <input
               type="text"
@@ -114,39 +114,20 @@ export default function Home() {
               onClick={() => console.log("Sidebar search:", sidebarSearch)}
               className="absolute top-1/2 right-2 -translate-y-1/2 text-cyan-300 hover:text-cyan-200"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                className="w-5 h-5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" />
               </svg>
             </button>
           </div>
-
-          {/* History items */}
           <nav className="flex flex-col mt-8 space-y-6 text-lg">
-            <a href="#" className="hover:text-cyan-400 transition-colors">
-              ASUS TUF A15
-            </a>
-            <a href="#" className="hover:text-cyan-400 transition-colors">
-              MACKBOOK M4
-            </a>
-            <a href="#" className="hover:text-cyan-400 transition-colors">
-              VALORANT
-            </a>
+            <a href="#" className="hover:text-cyan-400 transition-colors">ASUS TUF A15</a>
+            <a href="#" className="hover:text-cyan-400 transition-colors">MACKBOOK M4</a>
+            <a href="#" className="hover:text-cyan-400 transition-colors">VALORANT</a>
           </nav>
         </div>
       </div>
 
-      {/* Gooey Nav */}
+      {/* Gooey Nav (No changes to this block) */}
       <div
         className="absolute top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto
                    rounded-2xl bg-white/10 backdrop-blur-lg border border-white/20
@@ -164,11 +145,10 @@ export default function Home() {
         />
       </div>
 
-      {/* Main content */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+      {/* ✅ FIX: Added pt-24 to fix layout overlap */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pt-24">
         <div className="transform -translate-y-8">{splitTextMemo}</div>
 
-        {/* Main Search bar */}
         <div className="mt-8 pointer-events-auto w-[420px] max-w-[90%] relative">
           <input
             id="search-input"
@@ -188,19 +168,8 @@ export default function Home() {
                        rounded-full p-3 text-white shadow-[0_0_15px_rgba(0,255,255,0.3)]
                        hover:bg-cyan-400/50 transition-all duration-300 flex items-center justify-center"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              className="w-5 h-5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 8l4 4m0 0l-4 4m4-4H3"
-              />
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
             </svg>
           </button>
         </div>

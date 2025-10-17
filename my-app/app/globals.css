@@ -120,3 +120,63 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Replace your existing .fade-mask class with this one */
+.fade-mask {
+  mask-image: linear-gradient(to bottom,
+      transparent 0%,      /* Fades from the top */
+      black 15%,           /* Solid in the middle */
+      black 85%,           /* Solid in the middle */
+      transparent 100%     /* Fades to the bottom */
+  );
+  -webkit-mask-image: linear-gradient(to bottom,
+      transparent 0%,
+      black 15%,
+      black 85%,
+      transparent 100%
+  );
+}
+/* Replace your existing .fade-mask class with this one */
+.fade-mask {
+  mask-image: linear-gradient(to bottom,
+      transparent 0%,
+      black 20% /* Content becomes visible here */
+  );
+  -webkit-mask-image: linear-gradient(to bottom,
+      transparent 0%,
+      black 20%
+  );
+}
+
+/* Keep the scrollbar hiding utility */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none;    /* Firefox */
+}
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbars but keep scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+/* Subtle hover glow for cards */
+.profile-glow {
+  transition: all 0.3s ease-in-out;
+}
+.profile-glow:hover {
+  box-shadow: 0 0 25px rgba(0, 255, 255, 0.4),
+              0 0 45px rgba(255, 100, 200, 0.3);
+  transform: scale(1.05);
+}
