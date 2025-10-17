@@ -1,11 +1,23 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import LiquidChrome from "@/components/LiquidChrome";
 import SplitText from "@/components/SplitText";
 import GooeyNav from "@/components/GooeyNav";
 
+
 export default function Home() {
+  const router = useRouter();
+
+  // Redirect to login page on first visit
+  useEffect(() => {
+    const hasVisited = sessionStorage.getItem("hasVisited");
+    if (!hasVisited) {
+      sessionStorage.setItem("hasVisited", "true");
+      router.push("/login");
+    }
+  }, [router]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState("");
 
