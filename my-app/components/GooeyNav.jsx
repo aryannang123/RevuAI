@@ -20,10 +20,10 @@ const GooeyNav = ({
   // 🎨 Neon bubble color palette
   const palette = [
     '#00f5ff', // cyan
-    '#00ffaa', // teal green
+     // teal green
     '#8cfff0', // soft aqua
     '#00e0ff', // neon blue
-    '#ff00e6', // magenta accent
+    
   ];
 
   const noise = (n = 1) => n / 2 - Math.random() * n;

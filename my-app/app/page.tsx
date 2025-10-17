@@ -9,6 +9,18 @@ export default function Home() {
     console.log("All letters have animated!");
   };
 
+  const handleSearch = () => {
+    const input = document.getElementById("search-input") as HTMLInputElement;
+    console.log("Search:", input.value);
+    // Add your search functionality here
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleSearch();
+    }
+  };
+
   const items = [
     { label: "Home", href: "#" },
     { label: "About", href: "#" },
@@ -64,12 +76,42 @@ export default function Home() {
           />
         </div>
 
-        <div className="mt-8 pointer-events-auto w-[420px] max-w-[90%]">
+        {/* Search bar with arrow button */}
+        <div className="mt-8 pointer-events-auto w-[420px] max-w-[90%] relative">
           <input
+            id="search-input"
             type="text"
             placeholder="Search..."
-            className="w-full px-8 py-4 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-400 text-lg"
+            onKeyDown={handleKeyPress}
+            className="w-full px-6 py-4 pr-14 rounded-full 
+                       bg-white/10 backdrop-blur-md border border-cyan-300/50 
+                       text-white placeholder-white/60 focus:outline-none 
+                       focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 
+                       shadow-[0_0_20px_rgba(0,255,255,0.3)]
+                       text-lg transition-all duration-300"
           />
+          <button
+            onClick={handleSearch}
+            className="absolute top-1/2 right-1.5 -translate-y-1/2 bg-cyan-400/30 
+                       rounded-full p-3 text-white shadow-[0_0_15px_rgba(0,255,255,0.3)]
+                       hover:bg-cyan-400/50 transition-all duration-300 flex items-center justify-center"
+          >
+            {/* Arrow symbol (right arrow) */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              className="w-5 h-5"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M17 8l4 4m0 0l-4 4m4-4H3"
+              />
+            </svg>
+          </button>
         </div>
       </div>
     </main>
