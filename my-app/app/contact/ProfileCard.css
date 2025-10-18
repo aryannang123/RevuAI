@@ -339,6 +339,13 @@
   line-height: 1;
 }
 
+.pc-email {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1;
+  margin-top: 2px;
+}
+
 .pc-contact-btn {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
@@ -474,6 +481,10 @@
     font-size: 10px;
   }
 
+  .pc-email {
+    font-size: 9px;
+  }
+
   .pc-contact-btn {
     padding: 6px 12px;
     font-size: 11px;
@@ -524,6 +535,10 @@
     font-size: 9px;
   }
 
+  .pc-email {
+    font-size: 8px;
+  }
+
   .pc-contact-btn {
     padding: 5px 10px;
     font-size: 10px;
@@ -565,6 +580,10 @@
 
   .pc-status {
     font-size: 8px;
+  }
+
+  .pc-email {
+    font-size: 7px;
   }
 
   .pc-contact-btn {

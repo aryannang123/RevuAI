@@ -17,7 +17,7 @@ export default function ContactPage() {
       github: "ESHWAR1024",
       githubUrl: "https://github.com/ESHWAR1024",
       email: "eshwar10245@gmail.com",
-      avatarUrl:"https://www.google.com/url?sa=i&url=https%3A%2F%2Fwap.shookaa.com%2F%3Fc77bac8%3D22_3603067_2_52&psig=AOvVaw2voG7Zql61sdknBRYWhuXX&ust=1760794784346000&source=images&cd=vfe&opi=89978449&ved=0CBUQjRxqFwoTCIiFgfCtq5ADFQAAAAAdAAAAABAT"
+      avatarUrl: "https://www.google.com/url?sa=i&url=https%3A%2F%2Fwap.shookaa.com%2F%3Fc77bac8%3D22_3603067_2_52&psig=AOvVaw2voG7Zql61sdknBRYWhuXX&ust=1760794784346000&source=images&cd=vfe&opi=89978449&ved=0CBUQjRxqFwoTCIiFgfCtq5ADFQAAAAAdAAAAABAT"
     },
     {
       name: "Aryan",
@@ -35,7 +35,7 @@ export default function ContactPage() {
       name: "Gagan",
       github: "gaganraghavan",
       githubUrl: "https://github.com/gaganraghavan",
-      email: "gaganraghawan@gmail.com",
+      email: "gaganraghavan@gmail.com",
     },
   ];
 
@@ -73,14 +73,14 @@ export default function ContactPage() {
       </div>
 
       {/* Cards Section */}
-      <div className="relative z-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 px-8 pb-40 w-full max-w-7xl justify-items-center">
+      <div className="relative z-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 px-8 pb-40 w-full max-w-7xl justify-items-start">
         {team.map((member, index) => (
           <div key={index} className="flex flex-col items-center space-y-3">
             <ProfileCard
               name={member.name}
               title="Team Member"
               handle={member.github}
-              status="Online"
+              email={member.email}
               contactText="GitHub"
               showUserInfo={true}
               enableTilt={true}
@@ -92,7 +92,7 @@ export default function ContactPage() {
               innerGradient={false}
               showBehindGradient={false}
               miniAvatarUrl={null}
-              className="w-[270px] h-[270px] profile-glow"
+              className="w-[160px] h-[160px] profile-glow"
               onContactClick={() => window.open(member.githubUrl, "_blank")}
             />
             <div className="text-center">
@@ -105,14 +105,19 @@ export default function ContactPage() {
               >
                 @{member.github}
               </a>
-              <p className="text-white/70 text-sm">{member.email}</p>
+              <a
+                href={`mailto:${member.email}`}
+                className="text-white/70 hover:text-cyan-400 text-sm hover:underline block"
+              >
+                {member.email}
+              </a>
             </div>
           </div>
         ))}
       </div>
 
       {/* 👇 Added smooth scroll padding + thank-you section */}
-      <div className="relative z-20 w-full text-center pb-72 mt-32">
+      <div className="relative z-20 w-full text-center pb-72 mt-80">
 
         <p className="text-2xl font-semibold text-white/90">
           Thank you for visiting ✨

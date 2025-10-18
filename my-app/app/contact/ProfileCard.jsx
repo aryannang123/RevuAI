@@ -38,7 +38,8 @@ const ProfileCardComponent = ({
   name = 'Javi A. Torres',
   title = 'Software Engineer',
   handle = 'javicodes',
-  status = 'Online',
+  status = '',
+  email = '',
   contactText = 'Contact',
   showUserInfo = true,
   onContactClick
@@ -258,7 +259,6 @@ const ProfileCardComponent = ({
             <img
               className="avatar"
               src={null}
-              alt={`${name || 'User'} avatar`}
               loading="lazy"
               onError={e => {
                 const target = e.target;
@@ -282,7 +282,8 @@ const ProfileCardComponent = ({
                   </div>
                   <div className="pc-user-text">
                     <div className="pc-handle">@{handle}</div>
-                    <div className="pc-status">{status}</div>
+                    {status && <div className="pc-status">{status}</div>}
+                    {email && <div className="pc-email">{email}</div>}
                   </div>
                 </div>
                 <button
