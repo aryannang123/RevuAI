@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import LiquidChrome from "@/components/LiquidChrome";
 import SplitText from "@/components/SplitText";
 import GooeyNav from "@/components/GooeyNav";
-import { fetchSubredditData } from "@/lib/reddit";
+import { fetchRedditSearch } from "@/lib/reddit";
 
 
 export default function Home() {
@@ -15,53 +15,42 @@ export default function Home() {
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [user, setUser] = useState<any>(null);
 
-    const handleAnimationComplete = useCallback(() => {;
-  }, []);
-
-  // --- ADDITIONS START HERE ---
-
-  // 1. State variables to manage the search input, API data, loading, and errors.
-  const [searchTerm, setSearchTerm] = useState("");
+  // --- MODIFICATIONS FOR GLOBAL SEARCH ---
+  const [searchQuery, setSearchQuery] = useState("");
   const [redditData, setRedditData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 2. This function is called when you click the search button or press Enter.
   const handleSearch = useCallback(async () => {
-    // Make sure there's something to search for
-    if (!searchTerm) {
-      setError("Please enter a subreddit name to search.");
+    if (!searchQuery) {
+      setError("Please enter a search term.");
       return;
     }
 
-    // Reset state for the new search
     setIsLoading(true);
     setError(null);
     setRedditData(null);
 
     try {
-      const data = await fetchSubredditData(searchTerm);
+      const data = await fetchRedditSearch(searchQuery);
       
-      // Step 4: HERE IT IS! Log the entire response object to your browser's console.
-      console.log("--- Reddit API Response ---");
+      console.log("--- Global Reddit Search API Response ---");
       console.log(data);
-      console.log("--------------------------");
+      console.log("---------------------------------------");
 
-
-      // (Optional but helpful) Save the data to state so we can display it on the page.
       setRedditData(data);
 
     } catch (e: any) {
-      // Catch any errors that happened during the fetch and display them.
       console.error("Failed to fetch from Reddit API:", e);
       setError(e.message);
     } finally {
-      // Whether it succeeded or failed, we're done loading.
       setIsLoading(false);
     }
-  }, [searchTerm]); // This function will re-create itself if `searchTerm` changes.
+  }, [searchQuery]); 
 
-  // --- END OF ADDITIONS ---
+  // --- END OF MODIFICATIONS ---
+    const handleAnimationComplete = useCallback(() => {;
+  }, []);
 
   const handleKeyPress = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -77,7 +66,6 @@ export default function Home() {
     [sidebarSearch]
   );
 
-  // Your useMemo hook for SplitText is preserved
  const splitTextMemo = useMemo(
     () => (
       <SplitText
@@ -98,7 +86,6 @@ export default function Home() {
     [handleAnimationComplete]
   );
 
-  // ✅ UPDATE: Navigation links now point to the correct pages
   const items = useMemo(
     () => [
       { label: "Home", href: "/" },
@@ -108,7 +95,6 @@ export default function Home() {
     []
   );
 
-  // Check authentication status
   useEffect(() => {
     const checkAuth = async () => {
       const { getCurrentUser } = await import("@/lib/auth");
@@ -125,7 +111,6 @@ export default function Home() {
     checkAuth();
   }, [router]);
 
-  // Show loading state while checking authentication
   if (isAuthenticated === null) {
     return (
       <main className="relative h-screen w-full overflow-hidden flex items-center justify-center">
@@ -138,9 +123,6 @@ export default function Home() {
     <main className="relative h-screen w-full overflow-hidden">
       <LiquidChrome />
 
-
-
-      {/* Hamburger / Cross button (No changes here) */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
         className="absolute top-6 left-6 z-50 flex flex-col justify-between w-8 h-6 cursor-pointer pointer-events-auto"
@@ -159,17 +141,14 @@ export default function Home() {
         ></span>
       </button>
 
-      {/* Sidebar */}
       <div
         className={`fixed top-0 left-0 h-full w-64 bg-white/10 backdrop-blur-lg border-r border-white/20 shadow-lg z-40 transform transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
           }`}
       >
         <div className="flex flex-col px-6 pt-20 space-y-6 text-white h-full">
-          {/* User Profile Section */}
           {user && (
             <div className="bg-white/5 rounded-xl p-4 border border-white/10">
               <div className="flex items-center space-x-3">
-                {/* Profile Picture */}
                 <div className="w-12 h-12 rounded-full overflow-hidden shadow-lg">
                   {user.user_metadata?.avatar_url ? (
                     <img
@@ -184,7 +163,6 @@ export default function Home() {
                   )}
                 </div>
 
-                {/* User Info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-medium text-sm truncate">
                     {user.user_metadata?.full_name || 'User'}
@@ -197,7 +175,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Search History Section */}
           <div className="space-y-4">
             <h3 className="text-white/80 text-sm font-medium">Search History</h3>
             <div className="relative">
@@ -225,14 +202,12 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Recent Searches */}
           <nav className="flex flex-col space-y-3 text-sm flex-1">
-            <a href="#" className="hover:text-cyan-400 transition-colors p-2 rounded-lg hover:bg-white/5">ASUS TUF A15</a>
-            <a href="#" className="hover:text-cyan-400 transition-colors p-2 rounded-lg hover:bg-white/5">MACKBOOK M4</a>
-            <a href="#" className="hover:text-cyan-400 transition-colors p-2 rounded-lg hover:bg-white/5">VALORANT</a>
+            <a href="#" className="hover:text-cyan-400 transition-colors p-2 rounded-lg hover:bg-white/5">Nothing Phone 2</a>
+            <a href="#" className="hover:text-cyan-400 transition-colors p-2 rounded-lg hover:bg-white/5">Cyberpunk 2077</a>
+            <a href="#" className="hover:text-cyan-400 transition-colors p-2 rounded-lg hover:bg-white/5">iPhone 16</a>
           </nav>
 
-          {/* Logout Button at Bottom */}
           <div className="mt-auto pb-6">
             <button
               onClick={async () => {
@@ -251,7 +226,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Gooey Nav (No changes to this block) */}
       <div
         className="absolute top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto
                    rounded-2xl bg-white/10 backdrop-blur-lg border border-white/20
@@ -269,18 +243,16 @@ export default function Home() {
         />
       </div>
 
-      {/* ✅ FIX: Added pt-24 to fix layout overlap */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pt-24">
         <div className="transform -translate-y-8">{splitTextMemo}</div>
 
         <div className="mt-8 pointer-events-auto w-[420px] max-w-[90%] relative">
-          {/* UPDATE: Connected input to state and updated placeholder */}
           <input
             id="search-input"
             type="text"
-            placeholder="Enter a subreddit (e.g., reactjs)"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search all of Reddit..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleKeyPress}
             className="w-full px-6 py-4 pr-14 rounded-full 
                        bg-white/10 backdrop-blur-md border border-cyan-300/50 
@@ -301,11 +273,10 @@ export default function Home() {
           </button>
         </div>
         
-        {/* ADDITION: Display area for API response */}
         <div className="mt-4 p-4 bg-black/30 backdrop-blur-md rounded-2xl border border-white/10 w-full max-w-2xl h-72 pointer-events-auto text-white overflow-y-auto shadow-lg">
-          <h2 className="text-lg font-bold mb-2 text-cyan-300 sticky top-0 bg-black/30 backdrop-blur-sm -m-4 p-4 rounded-t-2xl z-10">Reddit API Response</h2>
+          <h2 className="text-lg font-bold mb-2 text-cyan-300 sticky top-0 bg-black/30 backdrop-blur-sm -m-4 p-4 rounded-t-2xl z-10">Global Reddit Search Results</h2>
           <div className="pt-2">
-            {isLoading && <p className="text-white/80">Loading subreddit data...</p>}
+            {isLoading && <p className="text-white/80">Searching Reddit...</p>}
             {error && <p className="text-red-400">{error}</p>}
             {redditData && (
               <pre className="text-xs whitespace-pre-wrap text-white/90">
@@ -313,7 +284,7 @@ export default function Home() {
               </pre>
             )}
             {!isLoading && !error && !redditData && (
-              <p className="text-white/60">Enter a subreddit and press Enter to see the raw JSON response here. Check the console for a more detailed view.</p>
+              <p className="text-white/60">Enter a keyword to search all of Reddit. The raw JSON response will appear here.</p>
             )}
           </div>
         </div>

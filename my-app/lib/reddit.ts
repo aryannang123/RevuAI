@@ -8,6 +8,7 @@ interface RedditPost {
     num_comments: number;
     permalink: string;
     url: string;
+    subreddit: string; // Added subreddit to the post data
   };
 }
 
@@ -19,27 +20,23 @@ interface RedditApiResponse {
 }
 
 /**
- * Fetches the top posts from a given subreddit using our local API proxy.
- * @param subreddit The name of the subreddit to fetch.
+ * Searches all of Reddit for a given keyword query.
+ * @param query The search term to look for.
  * @returns A promise that resolves to the JSON data from the Reddit API.
  */
-export const fetchSubredditData = async (subreddit: string): Promise<RedditApiResponse> => {
-  if (!subreddit) {
-    throw new Error("Subreddit name cannot be empty.");
+export const fetchRedditSearch = async (query: string): Promise<RedditApiResponse> => {
+  if (!query) {
+    throw new Error("Search query cannot be empty.");
   }
 
-  // Construct the URL for our local API route
-  const proxyUrl = `/api/reddit?subreddit=${encodeURIComponent(subreddit.trim())}`;
+  // Construct the URL for our local API route, now using a 'query' param
+  const proxyUrl = `/api/reddit?query=${encodeURIComponent(query.trim())}`;
   console.log(`Fetching data from our proxy: ${proxyUrl}`);
 
   const response = await fetch(proxyUrl);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: 'An unknown error occurred' }));
-    // Check for specific error statuses
-    if (response.status === 404) {
-      throw new Error(`Subreddit "${subreddit}" not found.`);
-    }
     if (response.status === 429) {
       throw new Error('Too many requests. Please wait a moment before trying again.');
     }

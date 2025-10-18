@@ -2,16 +2,17 @@ import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const subreddit = searchParams.get('subreddit');
+  const query = searchParams.get('query');
 
-  if (!subreddit) {
-    return NextResponse.json({ error: 'Subreddit parameter is required' }, { status: 400 });
+  if (!query) {
+    return NextResponse.json({ error: 'Search query parameter is required' }, { status: 400 });
   }
 
-  const redditURL = `https://www.reddit.com/r/${subreddit.trim()}.json`;
+  // Use the global Reddit search endpoint
+  const redditURL = `https://www.reddit.com/search.json?q=${encodeURIComponent(query.trim())}`;
 
   try {
-    console.log(`Proxying request to: ${redditURL}`);
+    console.log(`Proxying global search request to: ${redditURL}`);
     const response = await fetch(redditURL, {
       headers: {
         'User-Agent': 'RevuAI/0.1 by RevuAI Team'
@@ -32,3 +33,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Failed to fetch from Reddit API' }, { status: 500 });
   }
 }
+
