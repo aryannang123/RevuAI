@@ -9,15 +9,13 @@ import { useGSAP } from '@gsap/react';
 import { createClient } from '@supabase/supabase-js';
 import { Renderer, Program, Mesh, Triangle } from 'ogl';
 
-// --- INLINED AUTH LOGIC ---
+// --- AUTH LOGIC ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 let supabase: any;
 if (supabaseUrl && supabaseAnonKey) {
   supabase = createClient(supabaseUrl, supabaseAnonKey);
-} else {
-  console.error("Supabase URL or Anon Key is missing. Please check your .env.local file.");
 }
 
 const getCurrentUser = async () => {
@@ -42,12 +40,9 @@ const signOut = async () => {
   }
 };
 
-
-// --- INLINED COMPONENTS ---
-
 gsap.registerPlugin(ScrollTrigger, GSAPSplitText, useGSAP);
 
-// 1. GooeyNav Component
+// --- GOOEY NAV ---
 const GooeyNav = ({
   items,
   animationTime = 600,
@@ -72,9 +67,7 @@ const GooeyNav = ({
   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
 
   const palette = ['#00f5ff', '#8cfff0', '#00e0ff'];
-
   const noise = (n = 1) => n / 2 - Math.random() * n;
-
   const getXY = (distance: number, pointIndex: number, totalPoints: number) => {
     const angle = ((360 + noise(8)) / totalPoints) * pointIndex * (Math.PI / 180);
     return [distance * Math.cos(angle), distance * Math.sin(angle)];
@@ -120,9 +113,7 @@ const GooeyNav = ({
         element.appendChild(particle);
         requestAnimationFrame(() => element.classList.add('active'));
         setTimeout(() => {
-          try {
-            element.removeChild(particle);
-          } catch { /* noop */ }
+          try { element.removeChild(particle); } catch {}
         }, t);
       }, 30);
     }
@@ -171,9 +162,7 @@ const GooeyNav = ({
     }
     const observer = new ResizeObserver(() => {
         const currentActiveLi = navRef.current?.querySelectorAll('li')[activeIndex];
-        if (currentActiveLi) {
-            updateEffectPosition(currentActiveLi as HTMLElement);
-        }
+        if (currentActiveLi) updateEffectPosition(currentActiveLi as HTMLElement);
     });
     observer.observe(document.body);
     return () => observer.disconnect();
@@ -196,8 +185,7 @@ const GooeyNav = ({
   );
 };
 
-
-// 2. LiquidChrome Component
+// --- LIQUID CHROME ---
 const LiquidChrome = ({ baseColor = [0, 0.1, 0.1], speed = 0.2, amplitude = 0.3, frequencyX = 3, frequencyY = 3, interactive = true, ...props }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -222,74 +210,38 @@ const LiquidChrome = ({ baseColor = [0, 0.1, 0.1], speed = 0.2, amplitude = 0.3,
   return <div ref={containerRef} className="liquidChrome-container" {...props} />;
 };
 
-
-// 3. SplitText Component
-const SplitText = ({ text, className = '', delay = 100, duration = 0.6, ease = 'power3.out', splitType = 'chars', from = { opacity: 0, y: 40 }, to = { opacity: 1, y: 0 }, textAlign = 'center' }: {text: string, className?: string, delay?: number, duration?: number, ease?: string, splitType?: string, from?: object, to?: object, textAlign?: "center" | "left" | "right"}) => {
+// --- SPLIT TEXT ---
+const SplitText = ({ text, className = '' }: {text: string, className?: string}) => {
   const ref = useRef<HTMLHeadingElement>(null);
   useGSAP(() => {
     if (!ref.current || !text) return;
     gsap.set(ref.current, { visibility: 'visible' });
-    let splitInstance = new GSAPSplitText(ref.current, { type: splitType, linesClass: 'split-line', wordsClass: 'split-word', charsClass: 'split-char' });
-    gsap.fromTo(splitInstance.chars, { ...from }, { ...to, duration, ease, stagger: delay / 1000, scrollTrigger: { trigger: ref.current, start: 'top 90%', once: true } });
+    let splitInstance = new GSAPSplitText(ref.current, { type: 'chars', charsClass: 'split-char' });
+    gsap.fromTo(splitInstance.chars, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out', stagger: 0.1, scrollTrigger: { trigger: ref.current, start: 'top 90%', once: true } });
     return () => { if(splitInstance) splitInstance.revert(); };
-  }, { dependencies: [text, delay, duration, ease, splitType, JSON.stringify(from), JSON.stringify(to)], scope: ref });
-  return <h1 ref={ref} style={{ textAlign, visibility: 'hidden' }} className={`split-parent ${className}`}>{text}</h1>;
+  }, { dependencies: [text], scope: ref });
+  return <h1 ref={ref} style={{ textAlign: 'center', visibility: 'hidden' }} className={`split-parent ${className}`}>{text}</h1>;
 };
 
-
-// --- MAIN PAGE COMPONENT ---
+// --- MAIN COMPONENT ---
 export default function Home() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarSearch, setSidebarSearch] = useState("");
   const [user, setUser] = useState<any>(null);
 
+  // Reddit Fetcher States
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  const handleSearch = useCallback(() => {
-    if (!searchQuery) {
-      setError("Please enter a search term.");
-      return;
-    }
-    setIsLoading(true);
-    router.push(`/results?q=${encodeURIComponent(searchQuery)}`);
-  }, [searchQuery, router]);
-
-  const handleKeyPress = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") handleSearch();
-    },
-    [handleSearch]
-  );
-  
-  const handleSidebarSearch = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") console.log("Sidebar Search:", sidebarSearch);
-    },
-    [sidebarSearch]
-  );
-
-  const splitTextMemo = useMemo(
-    () => (
-      <SplitText
-        text="Rev AI"
-        className="text-6xl font-bold text-center text-white pointer-events-auto"
-      />
-    ),
-    []
-  );
-
-  const items = useMemo(
-    () => [
-      { label: "Home", href: "/" },
-      { label: "About", href: "/about" },
-      { label: "Contact", href: "/contact" },
-    ],
-    []
-  );
+  const items = useMemo(() => [
+    { label: "Home", href: "/" },
+    { label: "About", href: "/about" },
+    { label: "Contact", href: "/contact" },
+  ], []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -304,6 +256,234 @@ export default function Home() {
     checkAuth();
   }, [router]);
 
+  const downloadAsJSON = (data: any, queryName: string) => {
+    const jsonString = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reddit_${queryName.replace(/\s+/g, '_')}_${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Helper function to flatten nested comments
+  const flattenComments = (comment: any, depth = 0): any[] => {
+    if (!comment || comment.kind !== 't1') return [];
+    
+    const flatComment = {
+      id: comment.data.id,
+      author: comment.data.author,
+      body: comment.data.body,
+      score: comment.data.score,
+      createdAt: new Date(comment.data.created_utc * 1000).toISOString(),
+      depth: depth,
+      isSubmitter: comment.data.is_submitter,
+      distinguished: comment.data.distinguished
+    };
+    
+    const replies = comment.data.replies?.data?.children || [];
+    const childComments = replies.flatMap((reply: any) => flattenComments(reply, depth + 1));
+    
+    return [flatComment, ...childComments];
+  };
+
+  // Fetch comments for a single post
+  const fetchCommentsForPost = async (permalink: string, postId: string): Promise<any[]> => {
+    try {
+      const response = await fetch(`/api/reddit/comments?permalink=${encodeURIComponent(permalink)}&limit=500&depth=10`);
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch comments for ${postId}`);
+        return [];
+      }
+      
+      const data = await response.json();
+      const allComments: any[] = [];
+      
+      if (data.comments && data.comments.length > 0) {
+        data.comments.forEach((comment: any) => {
+          const flattened = flattenComments(comment);
+          allComments.push(...flattened);
+        });
+      }
+      
+      return allComments;
+    } catch (err) {
+      console.error(`Error fetching comments for ${postId}:`, err);
+      return [];
+    }
+  };
+
+  const handleSearch = useCallback(async () => {
+    if (!searchQuery.trim()) {
+      setError("Please enter a search query");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setSuccess(null);
+    setProgress({ current: 0, total: 0 });
+
+    try {
+      const allPostsMap = new Map();
+      
+      // SIMPLIFIED: Only relevance + comments (top 2 strategies)
+      const strategies = [
+        { sort: 'relevance', t: 'all', pages: 5 },
+        { sort: 'comments', t: 'all', pages: 5 }
+      ];
+      
+      const totalPostFetches = strategies.reduce((sum, s) => sum + s.pages, 0);
+      let currentFetch = 0;
+
+      console.log(`🚀 PHASE 1: Fetching high-engagement posts for "${searchQuery}"`);
+
+      for (const strategy of strategies) {
+        let after: string | null = null;
+        
+        for (let page = 0; page < strategy.pages; page++) {
+          currentFetch++;
+          setProgress({ current: currentFetch, total: totalPostFetches });
+          
+          let url = `/api/reddit?query=${encodeURIComponent(searchQuery.trim())}&limit=100&sort=${strategy.sort}&t=${strategy.t}`;
+          if (after) url += `&after=${after}`;
+
+          try {
+            const response = await fetch(url);
+            if (!response.ok) break;
+
+            const data = await response.json();
+            
+            if (data.posts && data.posts.length > 0) {
+              data.posts.forEach((post: any) => {
+                allPostsMap.set(post.data.id, post);
+              });
+              
+              after = data.after;
+              if (!after) break;
+            } else {
+              break;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 800));
+          } catch (err) {
+            console.error(`Error fetching posts:`, err);
+            break;
+          }
+        }
+      }
+
+      let allPosts = Array.from(allPostsMap.values());
+      
+      // Sort by comment count and take top 100 posts with most comments
+      allPosts = allPosts
+        .sort((a, b) => b.data.num_comments - a.data.num_comments)
+        .slice(0, 100);
+      
+      console.log(`✓ PHASE 1 complete: Selected top 100 posts (sorted by comment count)`);
+      console.log(`  Average comments per post: ${Math.round(allPosts.reduce((sum, p) => sum + p.data.num_comments, 0) / allPosts.length)}`);
+
+      if (allPosts.length === 0) {
+        setError("No posts found for this query");
+        setIsLoading(false);
+        return;
+      }
+
+      // PHASE 2: Fetch Comments for top 100 posts
+      console.log(`\n🚀 PHASE 2: Fetching comments for top 100 posts with most engagement`);
+      
+      const postsWithComments: any[] = [];
+      let totalComments = 0;
+
+      for (let i = 0; i < allPosts.length; i++) {
+        const post = allPosts[i];
+        setProgress({ 
+          current: i + 1, 
+          total: allPosts.length 
+        });
+        
+        console.log(`  Post ${i + 1}/100: "${post.data.title.substring(0, 50)}..." (${post.data.num_comments} comments)`);
+        
+        const comments = await fetchCommentsForPost(post.data.permalink, post.data.id);
+        totalComments += comments.length;
+        
+        postsWithComments.push({
+          post: post.data,
+          comments: comments
+        });
+        
+        console.log(`    ✓ ${comments.length} comments fetched | Total so far: ${totalComments}`);
+        
+        // Faster rate limiting
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+
+      console.log(`✓ PHASE 2 complete: ${totalComments} total comments fetched from 100 top posts`);
+
+      const processedData = {
+        metadata: {
+          query: searchQuery,
+          fetchedAt: new Date().toISOString(),
+          totalPosts: postsWithComments.length,
+          totalComments: totalComments,
+          averageCommentsPerPost: Math.round(totalComments / postsWithComments.length),
+          source: 'Reddit API',
+          fetchStrategy: 'Top 100 posts by relevance & comment count',
+          note: 'Focused on high-engagement posts with complete comment threads'
+        },
+        postsWithComments: postsWithComments.map(item => ({
+          post: {
+            id: item.post.id,
+            title: item.post.title,
+            author: item.post.author,
+            subreddit: item.post.subreddit,
+            content: item.post.selftext,
+            upvotes: item.post.ups,
+            score: item.post.score,
+            commentCount: item.post.num_comments,
+            url: `https://reddit.com${item.post.permalink}`,
+            createdAt: new Date(item.post.created_utc * 1000).toISOString(),
+            mediaUrl: item.post.url,
+            thumbnail: item.post.thumbnail,
+            isVideo: item.post.is_video || false
+          },
+          comments: item.comments,
+          commentsSummary: {
+            total: item.comments.length,
+            topLevelComments: item.comments.filter((c: any) => c.depth === 0).length,
+            nestedComments: item.comments.filter((c: any) => c.depth > 0).length,
+            averageScore: item.comments.length > 0 
+              ? Math.round(item.comments.reduce((sum: number, c: any) => sum + c.score, 0) / item.comments.length)
+              : 0,
+            maxDepth: item.comments.length > 0
+              ? Math.max(...item.comments.map((c: any) => c.depth))
+              : 0
+          }
+        }))
+      };
+
+      downloadAsJSON(processedData, searchQuery);
+      
+      setSuccess(`🎉 Fetched 100 high-engagement posts with ${totalComments.toLocaleString()} comments! File downloaded.`);
+      setSearchQuery("");
+      
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while fetching data');
+      console.error('❌ Fetch error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery]);
+
+  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !isLoading) handleSearch();
+  }, [handleSearch, isLoading]);
+
   if (isAuthenticated === null) {
     return (
       <main className="relative h-screen w-full overflow-hidden flex items-center justify-center bg-black">
@@ -316,7 +496,6 @@ export default function Home() {
     <>
       <style>{`
         .liquidChrome-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: -1; }
-        :root { --linear-ease: linear(0,0.068,0.19 2.7%,0.804 8.1%,1.037,1.199 13.2%,1.245,1.27 15.8%,1.274,1.272 17.4%,1.249 19.1%,0.996 28%,0.949,0.928 33.3%,0.926,0.933 36.8%,1.001 45.6%,1.013,1.019 50.8%,1.018 54.4%,1 63.1%,0.995 68%,1.001 85%,1); }
         .gooey-nav-container { position: relative; }
         .gooey-nav-container nav { display: flex; position: relative; }
         .gooey-nav-container nav ul { display: flex; gap: 2em; list-style: none; padding: 0 1em; margin: 0; position: relative; z-index: 3; color: white; text-shadow: 0 1px 1px hsl(205deg 30% 10% / 0.2); }
@@ -339,14 +518,15 @@ export default function Home() {
       `}</style>
       <main className="relative h-screen w-full overflow-hidden">
         <LiquidChrome />
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="absolute top-6 left-6 z-50 flex flex-col justify-between w-8 h-6 cursor-pointer pointer-events-auto"
-        >
+        
+        {/* Hamburger Menu */}
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute top-6 left-6 z-50 flex flex-col justify-between w-8 h-6 cursor-pointer pointer-events-auto">
           <span className={`block h-1 w-full bg-white rounded transition-all duration-300 ${sidebarOpen ? "rotate-45 translate-y-2.5" : ""}`}></span>
           <span className={`block h-1 w-full bg-white rounded transition-all duration-300 ${sidebarOpen ? "opacity-0" : ""}`}></span>
           <span className={`block h-1 w-full bg-white rounded transition-all duration-300 ${sidebarOpen ? "-rotate-45 -translate-y-2.5" : ""}`}></span>
         </button>
+
+        {/* Sidebar */}
         <div className={`fixed top-0 left-0 h-full w-64 bg-white/10 backdrop-blur-lg border-r border-white/20 shadow-lg z-40 transform transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
           <div className="flex flex-col px-6 pt-20 space-y-6 text-white h-full">
             {user && (
@@ -368,20 +548,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-            <div className="space-y-4">
-              <h3 className="text-white/80 text-sm font-medium">Search History</h3>
-              <div className="relative">
-                <input type="text" placeholder="Search history..." value={sidebarSearch} onChange={(e) => setSidebarSearch(e.target.value)} onKeyDown={handleSidebarSearch} className="w-full px-4 py-2 pr-10 rounded-full bg-cyan-400/20 backdrop-blur-md border border-cyan-300/60 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-cyan-400 shadow-[0_0_25px_rgba(0,255,255,0.4)] transition-all duration-300" />
-                <button onClick={() => console.log("Sidebar search:", sidebarSearch)} className="absolute top-1/2 right-2 -translate-y-1/2 text-cyan-300 hover:text-cyan-200">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" /></svg>
-                </button>
-              </div>
-            </div>
-            <nav className="flex flex-col space-y-3 text-sm flex-1">
-              <a href="#" className="hover:text-cyan-400 transition-colors p-2 rounded-lg hover:bg-white/5">Nothing Phone 2</a>
-              <a href="#" className="hover:text-cyan-400 transition-colors p-2 rounded-lg hover:bg-white/5">Cyberpunk 2077</a>
-              <a href="#" className="hover:text-cyan-400 transition-colors p-2 rounded-lg hover:bg-white/5">iPhone 16</a>
-            </nav>
             <div className="mt-auto pb-6">
               <button onClick={async () => { await signOut(); router.push("/login"); }} className="w-full bg-red-500/20 hover:bg-red-500/30 text-white px-4 py-3 rounded-lg border border-red-500/50 transition-all duration-300 shadow-[0_0_15px_rgba(255,0,0,0.2)] hover:shadow-[0_0_25px_rgba(255,0,0,0.4)] flex items-center justify-center gap-2 text-sm font-medium">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
@@ -391,25 +557,98 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Navigation */}
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto rounded-2xl bg-white/10 backdrop-blur-lg border border-white/20 shadow-[0_0_25px_rgba(255,255,255,0.15)] px-8 py-3 flex items-center justify-center">
           <GooeyNav items={items} />
         </div>
 
+        {/* Main Content */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pt-24">
-          <div className="transform -translate-y-8">{splitTextMemo}</div>
+          <div className="transform -translate-y-8">
+            <SplitText text="Rev AI" className="text-6xl font-bold text-center text-white pointer-events-auto" />
+          </div>
+          
           <div className="mt-8 pointer-events-auto w-[420px] max-w-[90%] relative">
-            <input id="search-input" type="text" placeholder="Search all of Reddit..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={handleKeyPress} disabled={isLoading} className="w-full px-6 py-4 pr-14 rounded-full bg-white/10 backdrop-blur-md border border-cyan-300/50 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 shadow-[0_0_20px_rgba(0,255,255,0.3)] text-lg transition-all duration-300 disabled:opacity-50" />
-            <button onClick={handleSearch} disabled={isLoading} className="absolute top-1/2 right-1.5 -translate-y-1/2 bg-cyan-400/30 rounded-full p-3 text-white shadow-[0_0_15px_rgba(0,255,255,0.3)] hover:bg-cyan-400/50 transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            <input 
+              type="text" 
+              placeholder="Search Reddit for data..." 
+              value={searchQuery} 
+              onChange={(e) => setSearchQuery(e.target.value)} 
+              onKeyDown={handleKeyPress} 
+              disabled={isLoading} 
+              className="w-full px-6 py-4 pr-14 rounded-full bg-white/10 backdrop-blur-md border border-cyan-300/50 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 shadow-[0_0_20px_rgba(0,255,255,0.3)] text-lg transition-all duration-300 disabled:opacity-50" 
+            />
+            <button 
+              onClick={handleSearch} 
+              disabled={isLoading} 
+              className="absolute top-1/2 right-1.5 -translate-y-1/2 bg-cyan-400/30 rounded-full p-3 text-white shadow-[0_0_15px_rgba(0,255,255,0.3)] hover:bg-cyan-400/50 transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
             </button>
           </div>
-          <div className="mt-4 text-center h-8">
-              {isLoading && <p className="text-white/80 animate-pulse">Navigating to results...</p>}
-              {error && <p className="text-red-400">{error}</p>}
+
+          {/* Status Messages */}
+          <div className="mt-6 text-center pointer-events-auto w-[500px] max-w-[90%]">
+            {isLoading && (
+              <div className="bg-white/5 rounded-lg p-5 border border-cyan-400/30 shadow-[0_0_20px_rgba(0,255,255,0.2)]">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-white/90 text-sm font-medium">
+                    {progress.total <= 30 ? '📊 Fetching Posts' : '💬 Fetching Comments'}: {progress.current} / {progress.total}
+                  </span>
+                  <span className="text-cyan-400 text-sm font-bold">
+                    {Math.round((progress.current / progress.total) * 100)}%
+                  </span>
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-2.5 overflow-hidden mb-3">
+                  <div
+                    className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 h-full transition-all duration-500 ease-out"
+                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-white/70 text-xs leading-relaxed">
+                  {progress.total <= 30 ? (
+                    <>🔄 Phase 1: Fetching posts from multiple strategies...</>
+                  ) : (
+                    <>💬 Phase 2: Fetching comment threads for analysis...</>
+                  )}
+                  <br/>
+                  ⏱️ This will take 3-5 minutes for complete data with comments
+                </p>
+                <div className="mt-3 pt-3 border-t border-white/10">
+                  <p className="text-cyan-300 text-xs font-medium">
+                    💡 Fetching posts + all their comments for deep analysis
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 shadow-[0_0_15px_rgba(255,0,0,0.2)]">
+                <div className="flex items-center gap-2 justify-center">
+                  <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-red-200 text-sm font-medium">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {success && (
+              <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4 shadow-[0_0_15px_rgba(0,255,0,0.2)]">
+                <div className="flex items-center gap-2 justify-center mb-2">
+                  <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-green-200 text-sm font-medium">{success}</p>
+                </div>
+                <p className="text-green-300/80 text-xs">Check your Downloads folder 📁</p>
+              </div>
+            )}
           </div>
         </div>
       </main>
     </>
   );
 }
-

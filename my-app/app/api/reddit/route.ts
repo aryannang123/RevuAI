@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-// This function fetches an access token from Reddit's API
 async function getAccessToken() {
   const clientId = process.env.REDDIT_CLIENT_ID;
   const clientSecret = process.env.REDDIT_CLIENT_SECRET;
@@ -35,66 +34,60 @@ async function getAccessToken() {
   return data.access_token;
 }
 
-
 export async function GET(request: Request) {
   try {
     const accessToken = await getAccessToken();
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('query');
+    const after = searchParams.get('after');
+    const limit = searchParams.get('limit') || '100';
+    const timeFilter = searchParams.get('t') || 'all';
+    const sort = searchParams.get('sort') || 'relevance';
 
     if (!query) {
       return NextResponse.json({ error: 'Search query parameter is required' }, { status: 400 });
     }
 
-    let allPosts: any[] = [];
-    let after: string | null = null;
-    const limit = 100;
-    const maxPages = 10; // 10 pages * 100 posts/page = 1000 posts
-
-    for (let i = 0; i < maxPages; i++) {
-      let redditURL = `https://oauth.reddit.com/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&sort=relevance&t=all`;
-      if (after) {
-        redditURL += `&after=${after}`;
-      }
-      
-      console.log(`Fetching page ${i + 1} from: ${redditURL}`);
-
-      const response = await fetch(redditURL, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'User-Agent': 'RevuAI/0.1 by RevuAI Team'
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error(`Reddit API Error: ${response.status}`, errorData);
-        // Stop paginating if there's an error
-        break;
-      }
-
-      const data = await response.json();
-      const posts = data.data.children;
-      if (posts.length > 0) {
-        allPosts = allPosts.concat(posts);
-      }
-
-      after = data.data.after;
-      if (!after) {
-        // No more pages
-        break;
-      }
-      
-      // A delay to respect rate limits
-      await new Promise(resolve => setTimeout(resolve, 1100));
+    let redditURL = `https://oauth.reddit.com/search.json?q=${encodeURIComponent(query.trim())}&limit=${limit}&sort=${sort}&t=${timeFilter}&raw_json=1`;
+    
+    if (after) {
+      redditURL += `&after=${after}`;
     }
     
-    console.log(`Fetched a total of ${allPosts.length} posts.`);
-    return NextResponse.json({ posts: allPosts });
+    console.log(`Fetching: sort=${sort}, t=${timeFilter}, after=${after || 'none'}`);
+
+    const response = await fetch(redditURL, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'User-Agent': 'RevuAI/0.1 by RevuAI Team'
+      },
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error(`Reddit API Error: ${response.status}`, errorData);
+      return NextResponse.json({ 
+        error: `Reddit API error: ${response.statusText}` 
+      }, { status: response.status });
+    }
+
+    const data = await response.json();
+    
+    console.log(`✓ Returned ${data.data.children.length} posts, next after: ${data.data.after || 'none'}`);
+    
+    return NextResponse.json({ 
+      posts: data.data.children,
+      after: data.data.after,
+      before: data.data.before,
+      dist: data.data.dist,
+      count: data.data.children.length
+    });
 
   } catch (error: any) {
-    console.error('Failed to fetch from Reddit API via proxy:', error);
-    return NextResponse.json({ error: error.message || 'Failed to fetch from Reddit API' }, { status: 500 });
+    console.error('Failed to fetch from Reddit API:', error);
+    return NextResponse.json({ 
+      error: error.message || 'Failed to fetch from Reddit API' 
+    }, { status: 500 });
   }
 }
-
