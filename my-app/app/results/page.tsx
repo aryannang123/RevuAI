@@ -3,8 +3,43 @@
 import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { fetchRedditSearch, RedditPost } from '../../lib/reddit';
 
+// --- INLINED REDDIT API LOGIC ---
+export interface RedditPost {
+  kind: string;
+  data: {
+    title: string;
+    author: string;
+    selftext: string;
+    ups: number;
+    num_comments: number;
+    permalink: string;
+    url: string;
+    subreddit: string;
+    created_utc: number;
+  };
+}
+
+export interface RedditApiResponse {
+  posts: RedditPost[];
+}
+
+export const fetchRedditSearch = async (query: string): Promise<RedditApiResponse> => {
+  if (!query) {
+    throw new Error("Search query cannot be empty.");
+  }
+  const proxyUrl = `/api/reddit?query=${encodeURIComponent(query.trim())}`;
+  const response = await fetch(proxyUrl);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'An unknown error occurred' }));
+    throw new Error(errorData.error || `API error (Status: ${response.status})`);
+  }
+  const data = await response.json();
+  return data as RedditApiResponse;
+};
+
+
+// --- PROCESS PAGE COMPONENT ---
 function ResultsPageComponent() {
   const searchParams = useSearchParams();
   const [redditData, setRedditData] = useState<RedditPost[] | null>(null);
@@ -92,11 +127,12 @@ function ResultsPageComponent() {
   );
 }
 
-
+// Wrapper for Suspense
 export default function ResultsPage() {
   return (
-    <Suspense fallback={<div className="bg-black text-white h-screen flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<div className="bg-black text-white h-screen flex items-center justify-center text-xl">Loading Page...</div>}>
       <ResultsPageComponent />
     </Suspense>
   )
 }
+

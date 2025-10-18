@@ -7,7 +7,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText as GSAPSplitText } from 'gsap/SplitText';
 import { useGSAP } from '@gsap/react';
 import { createClient } from '@supabase/supabase-js';
-import { Renderer, Program, Mesh, Triangle, Color } from 'ogl';
+import { Renderer, Program, Mesh, Triangle } from 'ogl';
 
 // --- INLINED AUTH LOGIC ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -41,6 +41,7 @@ const signOut = async () => {
     return { error: error.message };
   }
 };
+
 
 // --- INLINED COMPONENTS ---
 
@@ -94,8 +95,7 @@ const GooeyNav = ({
   const makeParticles = (element: HTMLElement) => {
     const d = particleDistances;
     const r = particleR;
-    const bubbleTime = animationTime * 2 + timeVariance;
-    element.style.setProperty('--time', `${bubbleTime}ms`);
+    element.style.setProperty('--time', `${animationTime * 2 + timeVariance}ms`);
 
     for (let i = 0; i < particleCount; i++) {
       const t = animationTime * 2 + noise(timeVariance * 2);
@@ -228,6 +228,7 @@ const SplitText = ({ text, className = '', delay = 100, duration = 0.6, ease = '
   const ref = useRef<HTMLHeadingElement>(null);
   useGSAP(() => {
     if (!ref.current || !text) return;
+    gsap.set(ref.current, { visibility: 'visible' });
     let splitInstance = new GSAPSplitText(ref.current, { type: splitType, linesClass: 'split-line', wordsClass: 'split-word', charsClass: 'split-char' });
     gsap.fromTo(splitInstance.chars, { ...from }, { ...to, duration, ease, stagger: delay / 1000, scrollTrigger: { trigger: ref.current, start: 'top 90%', once: true } });
     return () => { if(splitInstance) splitInstance.revert(); };
@@ -274,7 +275,7 @@ export default function Home() {
   const splitTextMemo = useMemo(
     () => (
       <SplitText
-        text="Revu AI"
+        text="Rev AI"
         className="text-6xl font-bold text-center text-white pointer-events-auto"
       />
     ),
@@ -300,7 +301,6 @@ export default function Home() {
         setUser(user);
       }
     };
-
     checkAuth();
   }, [router]);
 
