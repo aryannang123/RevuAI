@@ -14,9 +14,11 @@ export default function Home() {
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [user, setUser] = useState<any>(null);
 
+  const handleAnimationComplete = useCallback(() => {;
+  }, []);
 
   const handleSearch = useCallback(() => {
-    const input = document.getElementById("search-input") as HTMLInputElement;
+    const input = document.getElementById("search-input") as HTMLInputElement;;
   }, []);
 
   const handleKeyPress = useCallback(
@@ -48,8 +50,10 @@ export default function Home() {
         threshold={0.1}
         rootMargin="-90px"
         textAlign="center"
+        onLetterAnimationComplete={handleAnimationComplete}
       />
     ),
+    [handleAnimationComplete]
   );
 
   // ✅ UPDATE: Navigation links now point to the correct pages
