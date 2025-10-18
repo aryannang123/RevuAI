@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import LiquidChrome from "@/components/LiquidChrome";
 import SplitText from "@/components/SplitText";
 import GooeyNav from "@/components/GooeyNav";
+import { fetchSubredditData } from "@/lib/reddit";
 
 
 export default function Home() {
@@ -14,12 +15,53 @@ export default function Home() {
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [user, setUser] = useState<any>(null);
 
-  const handleAnimationComplete = useCallback(() => {;
+    const handleAnimationComplete = useCallback(() => {;
   }, []);
 
-  const handleSearch = useCallback(() => {
-    const input = document.getElementById("search-input") as HTMLInputElement;;
-  }, []);
+  // --- ADDITIONS START HERE ---
+
+  // 1. State variables to manage the search input, API data, loading, and errors.
+  const [searchTerm, setSearchTerm] = useState("");
+  const [redditData, setRedditData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 2. This function is called when you click the search button or press Enter.
+  const handleSearch = useCallback(async () => {
+    // Make sure there's something to search for
+    if (!searchTerm) {
+      setError("Please enter a subreddit name to search.");
+      return;
+    }
+
+    // Reset state for the new search
+    setIsLoading(true);
+    setError(null);
+    setRedditData(null);
+
+    try {
+      const data = await fetchSubredditData(searchTerm);
+      
+      // Step 4: HERE IT IS! Log the entire response object to your browser's console.
+      console.log("--- Reddit API Response ---");
+      console.log(data);
+      console.log("--------------------------");
+
+
+      // (Optional but helpful) Save the data to state so we can display it on the page.
+      setRedditData(data);
+
+    } catch (e: any) {
+      // Catch any errors that happened during the fetch and display them.
+      console.error("Failed to fetch from Reddit API:", e);
+      setError(e.message);
+    } finally {
+      // Whether it succeeded or failed, we're done loading.
+      setIsLoading(false);
+    }
+  }, [searchTerm]); // This function will re-create itself if `searchTerm` changes.
+
+  // --- END OF ADDITIONS ---
 
   const handleKeyPress = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -27,7 +69,7 @@ export default function Home() {
     },
     [handleSearch]
   );
-
+  
   const handleSidebarSearch = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter") console.log("Sidebar Search:", sidebarSearch);
@@ -36,7 +78,7 @@ export default function Home() {
   );
 
   // Your useMemo hook for SplitText is preserved
-  const splitTextMemo = useMemo(
+ const splitTextMemo = useMemo(
     () => (
       <SplitText
         text="Rev AI"
@@ -232,10 +274,13 @@ export default function Home() {
         <div className="transform -translate-y-8">{splitTextMemo}</div>
 
         <div className="mt-8 pointer-events-auto w-[420px] max-w-[90%] relative">
+          {/* UPDATE: Connected input to state and updated placeholder */}
           <input
             id="search-input"
             type="text"
-            placeholder="Search..."
+            placeholder="Enter a subreddit (e.g., reactjs)"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             onKeyDown={handleKeyPress}
             className="w-full px-6 py-4 pr-14 rounded-full 
                        bg-white/10 backdrop-blur-md border border-cyan-300/50 
@@ -255,7 +300,25 @@ export default function Home() {
             </svg>
           </button>
         </div>
+        
+        {/* ADDITION: Display area for API response */}
+        <div className="mt-4 p-4 bg-black/30 backdrop-blur-md rounded-2xl border border-white/10 w-full max-w-2xl h-72 pointer-events-auto text-white overflow-y-auto shadow-lg">
+          <h2 className="text-lg font-bold mb-2 text-cyan-300 sticky top-0 bg-black/30 backdrop-blur-sm -m-4 p-4 rounded-t-2xl z-10">Reddit API Response</h2>
+          <div className="pt-2">
+            {isLoading && <p className="text-white/80">Loading subreddit data...</p>}
+            {error && <p className="text-red-400">{error}</p>}
+            {redditData && (
+              <pre className="text-xs whitespace-pre-wrap text-white/90">
+                {JSON.stringify(redditData, null, 2)}
+              </pre>
+            )}
+            {!isLoading && !error && !redditData && (
+              <p className="text-white/60">Enter a subreddit and press Enter to see the raw JSON response here. Check the console for a more detailed view.</p>
+            )}
+          </div>
+        </div>
       </div>
     </main>
   );
 }
+
