@@ -244,13 +244,19 @@ const ProfileCardComponent = ({
       '--icon': iconUrl ? `url(${iconUrl})` : 'none',
       '--grain': grainUrl ? `url(${grainUrl})` : 'none',
       '--behind-gradient': showBehindGradient ? (behindGradient ?? DEFAULT_BEHIND_GRADIENT) : 'none',
-      '--inner-gradient': innerGradient ?? DEFAULT_INNER_GRADIENT,
+      '--inner-gradient': innerGradient ?? DEFAULT_INNER_GRADIENT
+    }),
+    [iconUrl, grainUrl, showBehindGradient, behindGradient, innerGradient]
+  );
+
+  const innerCardStyle = useMemo(
+    () => ({
       backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
       backgroundSize: 'cover',
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat'
     }),
-    [iconUrl, grainUrl, showBehindGradient, behindGradient, innerGradient, backgroundImage]
+    [backgroundImage]
   );
 
   const handleContactClick = useCallback(() => {
@@ -258,34 +264,23 @@ const ProfileCardComponent = ({
   }, [onContactClick]);
 
   return (
-    <div ref={wrapRef} className={`pc-card-wrapper ${className}`.trim()} style={cardStyle}>
-      <section ref={cardRef} className="pc-card">
-        <div className="pc-inside">
+    <div ref={wrapRef} className={`pc-card-wrapper ${className}`.trim()}>
+      <section ref={cardRef} className="pc-card" style={cardStyle}>
+        <div className="pc-inside" style={innerCardStyle}>
           <div className="pc-shine" />
           <div className="pc-glare" />
           <div className="pc-content pc-avatar-content">
-            {avatarUrl && (
-              <img
-                className="avatar"
-                src={avatarUrl}
-                loading="lazy"
-                onError={e => {
-                  const target = e.target;
-                  target.style.display = 'none';
-                }}
-              />
-            )}
             {showUserInfo && (
               <div className="pc-user-info">
                 <div className="pc-user-details">
                   <div className="pc-user-text">
                     {githubUrl ? (
-                      <a 
-                        href={githubUrl} 
-                        target="_blank" 
+                      <a
+                        href={githubUrl}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="pc-handle pc-handle-link"
-                        style={{ 
+                        style={{
                           pointerEvents: 'auto',
                           color: handleColor
                         }}
