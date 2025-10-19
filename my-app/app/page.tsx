@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -223,6 +223,55 @@ const SplitText = ({ text, className = '' }: {text: string, className?: string})
   return <h1 ref={ref} style={{ textAlign: 'center', visibility: 'hidden' }} className={`split-parent ${className}`}>{text}</h1>;
 };
 
+// Memoize components
+const MemoizedLiquidChrome = React.memo(LiquidChrome);
+const MemoizedGooeyNav = React.memo(GooeyNav);
+const MemoizedSplitText = React.memo(SplitText);
+
+// Status Messages Component
+const StatusMessages = React.memo(({ isLoading, progress, error, success }: any) => (
+  <div className="mt-6 text-center pointer-events-auto w-[500px] max-w-[90%] status-container">
+    {isLoading && (
+      <div className="bg-white/5 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_20px_rgba(0,255,255,0.2)] loading-transition">
+        <div className="flex items-center justify-center gap-3 mb-2">
+          <div className="animate-spin rounded-full h-5 w-5 border-2 border-cyan-400 border-t-transparent"></div>
+          <span className="text-white/90 text-sm font-medium">
+            {progress.total <= 3 ? 'Fetching posts...' : `Fetching comments... (${progress.current}/${progress.total})`}
+          </span>
+        </div>
+        <p className="text-white/60 text-xs">
+          This may take 30-60 seconds
+        </p>
+      </div>
+    )}
+
+    {error && (
+      <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 shadow-[0_0_15px_rgba(255,0,0,0.2)] loading-transition">
+        <div className="flex items-center gap-2 justify-center">
+          <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-red-200 text-sm font-medium">{error}</p>
+        </div>
+      </div>
+    )}
+
+    {success && (
+      <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4 shadow-[0_0_15px_rgba(0,255,0,0.2)] loading-transition">
+        <div className="flex items-center gap-2 justify-center mb-2">
+          <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-green-200 text-sm font-medium">{success}</p>
+        </div>
+        <p className="text-green-300/80 text-xs">Check my-app/pre-process/ folder 📁</p>
+      </div>
+    )}
+  </div>
+));
+
+StatusMessages.displayName = 'StatusMessages';
+
 // --- MAIN COMPONENT ---
 export default function Home() {
   const router = useRouter();
@@ -257,8 +306,6 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json();
         setSearchHistory(data.searches || []);
-      } else {
-        console.error('Failed to fetch search history');
       }
     } catch (err) {
       console.error('Error fetching search history:', err);
@@ -275,29 +322,14 @@ export default function Home() {
       } else {
         setIsAuthenticated(true);
         setUser(user);
-        // Fetch search history when user is authenticated
         await fetchSearchHistory(user.id);
       }
     };
     checkAuth();
   }, [router, fetchSearchHistory]);
 
-  const downloadAsJSON = (data: any, queryName: string) => {
-    const jsonString = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `reddit_${queryName.replace(/\s+/g, '_')}_${Date.now()}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   // Helper function to flatten nested comments
-  const flattenComments = (comment: any, depth = 0): any[] => {
+  const flattenComments = useCallback((comment: any, depth = 0): any[] => {
     if (!comment || comment.kind !== 't1') return [];
     
     const flatComment = {
@@ -315,81 +347,10 @@ export default function Home() {
     const childComments = replies.flatMap((reply: any) => flattenComments(reply, depth + 1));
     
     return [flatComment, ...childComments];
-  };
-
-  // Fetch comments for a single post with retry mechanism
-  const fetchCommentsForPost = async (permalink: string, postId: string, retries = 2): Promise<any[]> => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        // Add more detailed logging
-        console.log(`Attempt ${attempt + 1}/${retries + 1}: Fetching comments for post ${postId}`);
-        
-        // Fetch with sort=top to get highest scored comments
-        const response = await fetch(`/api/reddit/comments?permalink=${encodeURIComponent(permalink)}&limit=100&sort=top`);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Failed to fetch comments for ${postId} (attempt ${attempt + 1}):`, {
-            status: response.status,
-            statusText: response.statusText,
-            error: errorText
-          });
-          
-          // If it's a rate limit error (429) or server error (5xx), retry
-          if ((response.status === 429 || response.status >= 500) && attempt < retries) {
-            const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
-            console.log(`Retrying in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue;
-          }
-          
-          return [];
-        }
-        
-        const data = await response.json();
-        
-        // Check if there's an error in the response
-        if (data.error) {
-          console.error(`API returned error for ${postId}:`, data.error);
-          return [];
-        }
-        
-        const allComments: any[] = [];
-        
-        if (data.comments && data.comments.length > 0) {
-          data.comments.forEach((comment: any) => {
-            const flattened = flattenComments(comment);
-            allComments.push(...flattened);
-          });
-        }
-        
-        console.log(`✓ Successfully fetched ${allComments.length} comments for post ${postId}`);
-        
-        // Sort by score and take top 100
-        return allComments
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 100);
-        
-      } catch (err) {
-        console.error(`Error fetching comments for ${postId} (attempt ${attempt + 1}):`, err);
-        
-        // If it's the last attempt, return empty array
-        if (attempt === retries) {
-          return [];
-        }
-        
-        // Wait before retrying
-        const delay = Math.pow(2, attempt) * 1000;
-        console.log(`Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-    
-    return [];
-  };
+  }, []);
 
   // Save to file in pre-process directory
-  const saveToFile = async (data: any, queryName: string) => {
+  const saveToFile = useCallback(async (data: any, queryName: string) => {
     try {
       const fileName = `reddit_${queryName.replace(/\s+/g, '_')}_${Date.now()}.json`;
       
@@ -415,7 +376,7 @@ export default function Home() {
       console.error('Error saving file:', err);
       throw err;
     }
-  };
+  }, []);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
@@ -429,21 +390,26 @@ export default function Home() {
     setProgress({ current: 0, total: 0 });
 
     try {
+      // PHASE 1: Get high-engagement posts
+      console.log(`🚀 PHASE 1: Fetching high-engagement posts for "${searchQuery}"`);
+      
       const allPostsMap = new Map();
-      
-      // SIMPLIFIED: Only relevance sort to get ~240 posts
-      console.log(`🚀 PHASE 1: Fetching relevant posts for "${searchQuery}"`);
-      
       let after: string | null = null;
-      const maxPages = 3; // 3 pages * 100 = ~240-300 posts
       
-      for (let page = 0; page < maxPages; page++) {
-        setProgress({ current: page + 1, total: maxPages });
+      const strategies = [
+        { sort: 'top', t: 'month', pages: 1 },
+        { sort: 'top', t: 'year', pages: 1 },
+        { sort: 'relevance', t: 'all', pages: 1 }
+      ];
+      
+      for (const strategy of strategies) {
+        after = null;
+        setProgress({ current: strategies.indexOf(strategy) + 1, total: strategies.length });
         
-        let url = `/api/reddit?query=${encodeURIComponent(searchQuery.trim())}&limit=100&sort=relevance&t=all`;
-        if (after) url += `&after=${after}`;
+        for (let page = 0; page < strategy.pages; page++) {
+          let url = `/api/reddit?query=${encodeURIComponent(searchQuery.trim())}&limit=100&sort=${strategy.sort}&t=${strategy.t}`;
+          if (after) url += `&after=${after}`;
 
-        try {
           const response = await fetch(url);
           if (!response.ok) break;
 
@@ -453,82 +419,98 @@ export default function Home() {
             data.posts.forEach((post: any) => {
               allPostsMap.set(post.data.id, post);
             });
-            
-            console.log(`  Page ${page + 1}: +${data.posts.length} posts | Total: ${allPostsMap.size}`);
-            
             after = data.after;
             if (!after) break;
-          } else {
-            break;
-          }
+          } else break;
 
           await new Promise(resolve => setTimeout(resolve, 800));
-        } catch (err) {
-          console.error(`Error fetching posts:`, err);
-          break;
         }
       }
 
-      const allPosts = Array.from(allPostsMap.values());
-      console.log(`✓ PHASE 1 complete: ${allPosts.length} posts fetched`);
+      let allPosts = Array.from(allPostsMap.values());
+      
+      allPosts = allPosts
+        .filter(p => p.data.num_comments >= 10)
+        .sort((a, b) => b.data.num_comments - a.data.num_comments)
+        .slice(0, 35);
+      
+      console.log(`✓ PHASE 1: Selected ${allPosts.length} high-engagement posts`);
 
       if (allPosts.length === 0) {
-        setError("No posts found for this query");
+        setError("No posts found with sufficient engagement");
         setIsLoading(false);
         return;
       }
 
-      // PHASE 2: Fetch Comments (stop at 5k total)
-      console.log(`\n🚀 PHASE 2: Fetching top 100 comments from each post (max 5k total)`);
+      // PHASE 2: Batch fetch comments
+      console.log(`\n🚀 PHASE 2: Fetching comments from ${allPosts.length} posts`);
+      
+      const MAX_COMMENTS = 5000;
+      const commentsPerPost = Math.ceil(MAX_COMMENTS / allPosts.length);
       
       const postsWithComments: any[] = [];
       let totalComments = 0;
-      const MAX_COMMENTS = 5000;
-      const COMMENTS_PER_POST = 100;
-
-      for (let i = 0; i < allPosts.length; i++) {
-        if (totalComments >= MAX_COMMENTS) {
-          console.log(`  ⚠️ Reached 5k comment limit, stopping at post ${i}`);
-          break;
-        }
-
-        const post = allPosts[i];
+      
+      const batchSize = 5;
+      for (let i = 0; i < allPosts.length; i += batchSize) {
+        const batch = allPosts.slice(i, Math.min(i + batchSize, allPosts.length));
+        
         setProgress({ 
-          current: i + 1, 
-          total: Math.min(allPosts.length, 240)
+          current: i + batch.length, 
+          total: allPosts.length 
         });
         
-        console.log(`  Post ${i + 1}: "${post.data.title.substring(0, 50)}..." | Fetching top 100 comments`);
-        
-        const comments = await fetchCommentsForPost(post.data.permalink, post.data.id);
-        
-        // Skip posts that have no comments (might be deleted, private, or failed to fetch)
-        if (comments.length === 0) {
-          console.log(`    ⚠️ No comments found for post ${i + 1}, skipping...`);
-          continue;
-        }
-        
-        // Add comments (max 100 per post)
-        const commentsToAdd = comments.slice(0, Math.min(COMMENTS_PER_POST, MAX_COMMENTS - totalComments));
-        totalComments += commentsToAdd.length;
-        
-        postsWithComments.push({
-          post: post.data,
-          comments: commentsToAdd
+        const batchPromises = batch.map(async (post) => {
+          if (totalComments >= MAX_COMMENTS) return null;
+          
+          try {
+            const response = await fetch(
+              `/api/reddit/comments?permalink=${encodeURIComponent(post.data.permalink)}&limit=${commentsPerPost}&sort=top`
+            );
+            
+            if (!response.ok) return null;
+            
+            const data = await response.json();
+            const allComments: any[] = [];
+            
+            if (data.comments && data.comments.length > 0) {
+              data.comments.forEach((comment: any) => {
+                const flattened = flattenComments(comment);
+                allComments.push(...flattened);
+              });
+            }
+            
+            const topComments = allComments
+              .sort((a, b) => b.score - a.score)
+              .slice(0, Math.min(commentsPerPost, MAX_COMMENTS - totalComments));
+            
+            return {
+              post: post.data,
+              comments: topComments
+            };
+          } catch (err) {
+            console.error(`Failed to fetch comments:`, err);
+            return null;
+          }
         });
         
-        console.log(`    ✓ ${commentsToAdd.length} top comments added | Total: ${totalComments}`);
+        const batchResults = await Promise.all(batchPromises);
         
-        // Stop if we've hit the limit
-        if (totalComments >= MAX_COMMENTS) {
-          console.log(`  ✓ Reached ${MAX_COMMENTS} comment limit`);
-          break;
+        batchResults.forEach(result => {
+          if (result && result.comments.length > 0) {
+            totalComments += result.comments.length;
+            postsWithComments.push(result);
+          }
+        });
+        
+        if (totalComments >= MAX_COMMENTS) break;
+        
+        if (i + batchSize < allPosts.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        
-        await new Promise(resolve => setTimeout(resolve, 700));
       }
 
-      console.log(`✓ PHASE 2 complete: ${totalComments} total comments from ${postsWithComments.length} posts`);
+      console.log(`✓ PHASE 2: ${totalComments} total comments from ${postsWithComments.length} posts`);
 
       const processedData = {
         metadata: {
@@ -538,8 +520,8 @@ export default function Home() {
           totalComments: totalComments,
           averageCommentsPerPost: Math.round(totalComments / postsWithComments.length),
           source: 'Reddit API',
-          fetchStrategy: 'Relevance-based with 5k comment limit',
-          note: 'Optimized for analysis - relevant posts with max 5k comments'
+          fetchStrategy: 'High-engagement posts with top comments',
+          note: 'Focused on posts with active discussions and quality comments'
         },
         postsWithComments: postsWithComments.map(item => ({
           post: {
@@ -550,7 +532,7 @@ export default function Home() {
             content: item.post.selftext,
             upvotes: item.post.ups,
             score: item.post.score,
-            commentCount: item.post.num_comments,
+            commentCount: item.post.num_columns,
             url: `https://reddit.com${item.post.permalink}`,
             createdAt: new Date(item.post.created_utc * 1000).toISOString(),
             mediaUrl: item.post.url,
@@ -567,21 +549,23 @@ export default function Home() {
               : 0,
             maxDepth: item.comments.length > 0
               ? Math.max(...item.comments.map((c: any) => c.depth))
+              : 0,
+            minScore: item.comments.length > 0
+              ? Math.min(...item.comments.map((c: any) => c.score))
+              : 0,
+            maxScore: item.comments.length > 0
+              ? Math.max(...item.comments.map((c: any) => c.score))
               : 0
           }
         }))
       };
 
-      // Save to pre-process directory (keep existing functionality)
       await saveToFile(processedData, searchQuery);
       
-      // Save to database
       try {
         const response = await fetch('/api/searches', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: user.id,
             userEmail: user.email,
@@ -590,19 +574,13 @@ export default function Home() {
         });
 
         if (response.ok) {
-          const result = await response.json();
-          console.log('✓ Search saved to database:', result.search.id);
-          // Refresh search history
           await fetchSearchHistory(user.id);
-        } else {
-          console.error('Failed to save to database:', await response.text());
         }
       } catch (dbError) {
         console.error('Database save error:', dbError);
-        // Don't fail the entire process if database save fails
       }
       
-      setSuccess(`🎉 Saved ${postsWithComments.length} posts with ${totalComments.toLocaleString()} comments to database and pre-process/`);
+      setSuccess(`🎉 Saved ${postsWithComments.length} posts with ${totalComments.toLocaleString()} quality comments!`);
       setSearchQuery("");
       
     } catch (err: any) {
@@ -611,7 +589,7 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, user, fetchSearchHistory, flattenComments, saveToFile]);
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !isLoading) {
@@ -631,8 +609,8 @@ export default function Home() {
   return (
     <>
       <style>{`
-        .liquidChrome-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: -1; }
-        .gooey-nav-container { position: relative; }
+        .liquidChrome-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: -1; transform: translateZ(0); backface-visibility: hidden; }
+        .gooey-nav-container { position: relative; transform: translateZ(0); }
         .gooey-nav-container nav { display: flex; position: relative; }
         .gooey-nav-container nav ul { display: flex; gap: 2em; list-style: none; padding: 0 1em; margin: 0; position: relative; z-index: 3; color: white; text-shadow: 0 1px 1px hsl(205deg 30% 10% / 0.2); }
         .gooey-nav-container nav ul li { border-radius: 100vw; position: relative; cursor: pointer; transition: color 0.3s ease; color: white; }
@@ -650,10 +628,16 @@ export default function Home() {
         .particle { --time: 5s; position: absolute; top: calc(50% - 4px); left: calc(50% - 4px); animation: particle calc(var(--time)) ease 1 -350ms; }
         @keyframes particle { 0% { transform: rotate(0deg) translate(var(--start-x), var(--start-y)); opacity: 1; } 70% { transform: rotate(calc(var(--rotate) * 0.5)) translate(calc(var(--end-x) * 1.2), calc(var(--end-y) * 1.2)); opacity: 1; } 85% { transform: rotate(calc(var(--rotate) * 0.66)) translate(var(--end-x), var(--end-y)); opacity: 1; } 100% { transform: rotate(calc(var(--rotate) * 1.2)) translate(calc(var(--end-x) * 0.5), calc(var(--end-y) * 0.5)); opacity: 1; } }
         @keyframes point { 0% { transform: scale(0); opacity: 0; } 25% { transform: scale(calc(var(--scale) * 0.25)); } 38% { opacity: 1; } 65% { transform: scale(var(--scale)); opacity: 1; } 85% { transform: scale(var(--scale)); opacity: 1; } 100% { transform: scale(0); opacity: 0; } }
-        .split-parent { display: inline-block; overflow: hidden; } .split-char { display: inline-block; }
+        .split-parent { display: inline-block; overflow: hidden; transform: translateZ(0); } .split-char { display: inline-block; }
+        .status-container { min-height: 80px; display: flex; align-items: center; justify-content: center; }
+        .loading-transition { transition: opacity 0.2s ease-in-out; }
       `}</style>
-      <main className="relative h-screen w-full overflow-hidden">
-        <LiquidChrome />
+      {/*
+        FIX: Removed inline 'backgroundColor: #000000' and set to 'transparent'
+        This allows the z-index: -1 LiquidChrome component to be visible.
+      */}
+      <main className="relative h-screen w-full overflow-hidden" style={{ backgroundColor: 'transparent' }}>
+        <MemoizedLiquidChrome />
         
         {/* Hamburger Menu */}
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute top-6 left-6 z-50 flex flex-col justify-between w-8 h-6 cursor-pointer pointer-events-auto">
@@ -698,7 +682,7 @@ export default function Home() {
                 {searchHistory.length === 0 ? (
                   <p className="text-white/50 text-xs italic">No searches yet</p>
                 ) : (
-                  searchHistory.map((search, index) => (
+                  searchHistory.map((search) => (
                     <div 
                       key={search.id} 
                       className="bg-white/5 rounded-lg p-3 border border-white/10 hover:bg-white/10 transition-colors cursor-pointer"
@@ -734,13 +718,13 @@ export default function Home() {
 
         {/* Navigation */}
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto rounded-2xl bg-white/10 backdrop-blur-lg border border-white/20 shadow-[0_0_25px_rgba(255,255,255,0.15)] px-8 py-3 flex items-center justify-center">
-          <GooeyNav items={items} />
+          <MemoizedGooeyNav items={items} />
         </div>
 
         {/* Main Content */}
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pt-24">
           <div className="transform -translate-y-8">
-            <SplitText text="Rev AI" className="text-6xl font-bold text-center text-white pointer-events-auto" />
+            <MemoizedSplitText text="Rev AI" className="text-6xl font-bold text-center text-white pointer-events-auto" />
           </div>
           
           <div className="mt-8 pointer-events-auto w-[420px] max-w-[90%] relative">
@@ -767,44 +751,7 @@ export default function Home() {
           </div>
 
           {/* Status Messages */}
-          <div className="mt-6 text-center pointer-events-auto w-[500px] max-w-[90%]">
-            {isLoading && (
-              <div className="bg-white/5 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_20px_rgba(0,255,255,0.2)]">
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-cyan-400 border-t-transparent"></div>
-                  <span className="text-white/90 text-sm font-medium">
-                    {progress.total <= 3 ? 'Fetching posts...' : `Fetching comments... (${progress.current}/${progress.total})`}
-                  </span>
-                </div>
-                <p className="text-white/60 text-xs">
-                  This may take 1-2 minutes
-                </p>
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 shadow-[0_0_15px_rgba(255,0,0,0.2)]">
-                <div className="flex items-center gap-2 justify-center">
-                  <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="text-red-200 text-sm font-medium">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {success && (
-              <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4 shadow-[0_0_15px_rgba(0,255,0,0.2)]">
-                <div className="flex items-center gap-2 justify-center mb-2">
-                  <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="text-green-200 text-sm font-medium">{success}</p>
-                </div>
-                <p className="text-green-300/80 text-xs">Check my-app/pre-process/ folder 📁</p>
-              </div>
-            )}
-          </div>
+          <StatusMessages isLoading={isLoading} progress={progress} error={error} success={success} />
         </div>
       </main>
     </>
