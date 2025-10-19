@@ -40,9 +40,12 @@ const ProfileCardComponent = ({
   handle = 'javicodes',
   status = '',
   email = '',
+  githubUrl = '',
+  handleColor = 'rgba(0, 255, 255, 0.9)',
+  emailColor = 'rgba(255, 255, 255, 0.6)',
   contactText = 'Contact',
   showUserInfo = true,
-  onContactClick
+  onContactClick = null
 }) => {
   const wrapRef = useRef(null);
   const cardRef = useRef(null);
@@ -256,45 +259,41 @@ const ProfileCardComponent = ({
           <div className="pc-shine" />
           <div className="pc-glare" />
           <div className="pc-content pc-avatar-content">
-            <img
-              className="avatar"
-              src={null}
-              loading="lazy"
-              onError={e => {
-                const target = e.target;
-                target.style.display = 'none';
-              }}
-            />
+            {avatarUrl && (
+              <img
+                className="avatar"
+                src={avatarUrl}
+                loading="lazy"
+                onError={e => {
+                  const target = e.target;
+                  target.style.display = 'none';
+                }}
+              />
+            )}
             {showUserInfo && (
               <div className="pc-user-info">
                 <div className="pc-user-details">
-                  <div className="pc-mini-avatar">
-                    <img
-                      src={null}
-                      alt={`${name || 'User'} mini avatar`}
-                      loading="lazy"
-                      onError={e => {
-                        const target = e.target;
-                        target.style.opacity = '0.5';
-                        target.src = avatarUrl;
-                      }}
-                    />
-                  </div>
                   <div className="pc-user-text">
-                    <div className="pc-handle">@{handle}</div>
+                    {githubUrl ? (
+                      <a 
+                        href={githubUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="pc-handle pc-handle-link"
+                        style={{ 
+                          pointerEvents: 'auto',
+                          color: handleColor
+                        }}
+                      >
+                        @{handle}
+                      </a>
+                    ) : (
+                      <div className="pc-handle" style={{ color: handleColor }}>@{handle}</div>
+                    )}
                     {status && <div className="pc-status">{status}</div>}
-                    {email && <div className="pc-email">{email}</div>}
+                    {email && <div className="pc-email" style={{ color: emailColor }}>{email}</div>}
                   </div>
                 </div>
-                <button
-                  className="pc-contact-btn"
-                  onClick={handleContactClick}
-                  style={{ pointerEvents: 'auto' }}
-                  type="button"
-                  aria-label={`Contact ${name || 'user'}`}
-                >
-                  {contactText}
-                </button>
               </div>
             )}
           </div>
@@ -302,6 +301,7 @@ const ProfileCardComponent = ({
             <div className="pc-details">
               <h3>{name}</h3>
               <p>{title}</p>
+
             </div>
           </div>
         </div>

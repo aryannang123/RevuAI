@@ -17,7 +17,7 @@ export default function ContactPage() {
       github: "ESHWAR1024",
       githubUrl: "https://github.com/ESHWAR1024",
       email: "eshwar10245@gmail.com",
-      avatarUrl: "https://www.google.com/url?sa=i&url=https%3A%2F%2Fwap.shookaa.com%2F%3Fc77bac8%3D22_3603067_2_52&psig=AOvVaw2voG7Zql61sdknBRYWhuXX&ust=1760794784346000&source=images&cd=vfe&opi=89978449&ved=0CBUQjRxqFwoTCIiFgfCtq5ADFQAAAAAdAAAAABAT"
+      avatarUrl: "/LUFFY.jpg"
     },
     {
       name: "Aryan",
@@ -81,11 +81,14 @@ export default function ContactPage() {
               title="Team Member"
               handle={member.github}
               email={member.email}
+              githubUrl={member.githubUrl}
+              handleColor={member.name === "Eshwar" ? "black" : "rgba(0, 255, 255, 0.9)"}
+              emailColor={member.name === "Eshwar" ? "black" : "rgba(255, 255, 255, 0.6)"}
               contactText="GitHub"
               showUserInfo={true}
               enableTilt={true}
               enableMobileTilt={false}
-              avatarUrl={""}
+              avatarUrl={member.avatarUrl || ""}
               iconUrl={""}
               grainUrl={""}
               behindGradient={false}
@@ -93,7 +96,6 @@ export default function ContactPage() {
               showBehindGradient={false}
               miniAvatarUrl={null}
               className="w-[160px] h-[160px] profile-glow"
-              onContactClick={() => window.open(member.githubUrl, "_blank")}
             />
             <div className="text-center">
               <p className="text-white/90 font-semibold">{member.name}</p>
@@ -101,13 +103,19 @@ export default function ContactPage() {
                 href={member.githubUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-cyan-400 hover:underline block"
+                className={`hover:underline block ${member.name === "Eshwar"
+                  ? "text-black"
+                  : "text-cyan-400"
+                  }`}
               >
                 @{member.github}
               </a>
               <a
                 href={`mailto:${member.email}`}
-                className="text-white/70 hover:text-cyan-400 text-sm hover:underline block"
+                className={`text-sm hover:underline block ${member.name === "Eshwar"
+                  ? "text-black hover:text-gray-800"
+                  : "text-white/70 hover:text-cyan-400"
+                  }`}
               >
                 {member.email}
               </a>

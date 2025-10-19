@@ -333,6 +333,17 @@
   line-height: 1;
 }
 
+.pc-handle-link {
+  text-decoration: none;
+  color: rgba(0, 255, 255, 0.9);
+  transition: color 0.2s ease;
+}
+
+.pc-handle-link:hover {
+  color: rgba(0, 255, 255, 1);
+  text-decoration: underline;
+}
+
 .pc-status {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.7);
@@ -411,6 +422,22 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
   -webkit-background-clip: text;
+}
+
+.pc-profile-image {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.profile-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes glow-bg {
