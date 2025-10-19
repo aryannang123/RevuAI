@@ -17,7 +17,7 @@ export default function ContactPage() {
       github: "ESHWAR1024",
       githubUrl: "https://github.com/ESHWAR1024",
       email: "eshwar10245@gmail.com",
-      avatarUrl: "/LUFFY.jpg"
+      avatarUrl: "/yorichi.jpg"
     },
     {
       name: "Aryan",
@@ -31,13 +31,14 @@ export default function ContactPage() {
       github: "amogh-2007",
       githubUrl: "https://github.com/amogh-2007",
       email: "amoghherle07@gmail.com",
-      avatarUrl: "/zeinitsu.jpeg"
+      avatarUrl:  "/rengoku.jpeg"
     },
     {
       name: "Gagan",
       github: "gaganraghavan",
       githubUrl: "https://github.com/gaganraghavan",
       email: "gaganraghavan@gmail.com",
+      avatarUrl: "/zeinitsu.jpeg"
     },
   ];
 
