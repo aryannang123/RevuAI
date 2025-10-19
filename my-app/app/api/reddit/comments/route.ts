@@ -40,18 +40,17 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const permalink = searchParams.get('permalink');
     const limit = searchParams.get('limit') || '100';
-    const depth = searchParams.get('depth') || '10';
+    const sort = searchParams.get('sort') || 'top'; // Sort by top (best) comments
 
     if (!permalink) {
       return NextResponse.json({ error: 'Permalink is required' }, { status: 400 });
     }
 
-    // Fetch comments for the post
-    // Remove leading slash if present
+    // Fetch comments sorted by best/top
     const cleanPermalink = permalink.startsWith('/') ? permalink.slice(1) : permalink;
-    const commentsURL = `https://oauth.reddit.com/${cleanPermalink}.json?limit=${limit}&depth=${depth}&raw_json=1`;
+    const commentsURL = `https://oauth.reddit.com/${cleanPermalink}.json?limit=${limit}&sort=${sort}&raw_json=1`;
     
-    console.log(`Fetching comments from: ${commentsURL}`);
+    console.log(`Fetching top comments from: ${commentsURL}`);
 
     const response = await fetch(commentsURL, {
       headers: {

@@ -294,7 +294,8 @@ export default function Home() {
   // Fetch comments for a single post
   const fetchCommentsForPost = async (permalink: string, postId: string): Promise<any[]> => {
     try {
-      const response = await fetch(`/api/reddit/comments?permalink=${encodeURIComponent(permalink)}&limit=200&depth=5`);
+      // Fetch with sort=top to get highest scored comments
+      const response = await fetch(`/api/reddit/comments?permalink=${encodeURIComponent(permalink)}&limit=100&sort=top`);
       
       if (!response.ok) {
         console.error(`Failed to fetch comments for ${postId}`);
@@ -311,7 +312,11 @@ export default function Home() {
         });
       }
       
-      return allComments;
+      // Sort by score and take top 100
+      return allComments
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 100);
+      
     } catch (err) {
       console.error(`Error fetching comments for ${postId}:`, err);
       return [];
@@ -409,48 +414,45 @@ export default function Home() {
       }
 
       // PHASE 2: Fetch Comments (stop at 5k total)
-      console.log(`\n🚀 PHASE 2: Fetching comments (max 5,000 total)`);
+      console.log(`\n🚀 PHASE 2: Fetching top 100 comments from each post (max 5k total)`);
       
       const postsWithComments: any[] = [];
       let totalComments = 0;
       const MAX_COMMENTS = 5000;
+      const COMMENTS_PER_POST = 100;
 
       for (let i = 0; i < allPosts.length; i++) {
         if (totalComments >= MAX_COMMENTS) {
-          console.log(`  ⚠️ Reached 5k comment limit at post ${i + 1}`);
+          console.log(`  ⚠️ Reached 5k comment limit, stopping at post ${i}`);
           break;
         }
 
         const post = allPosts[i];
         setProgress({ 
           current: i + 1, 
-          total: allPosts.length 
+          total: Math.min(allPosts.length, Math.ceil(MAX_COMMENTS / COMMENTS_PER_POST))
         });
         
-        console.log(`  Post ${i + 1}/${allPosts.length}: "${post.data.title.substring(0, 50)}..." (${post.data.num_comments} comments listed)`);
+        console.log(`  Post ${i + 1}: "${post.data.title.substring(0, 50)}..." | Fetching top 100 comments`);
         
         const comments = await fetchCommentsForPost(post.data.permalink, post.data.id);
         
-        // Check if adding these comments would exceed limit
-        if (totalComments + comments.length > MAX_COMMENTS) {
-          const remaining = MAX_COMMENTS - totalComments;
-          console.log(`  ⚠️ Taking only ${remaining} comments from this post to stay under 5k`);
-          postsWithComments.push({
-            post: post.data,
-            comments: comments.slice(0, remaining)
-          });
-          totalComments += remaining;
-          break;
-        }
-        
-        totalComments += comments.length;
+        // Add comments (max 100 per post)
+        const commentsToAdd = comments.slice(0, Math.min(COMMENTS_PER_POST, MAX_COMMENTS - totalComments));
+        totalComments += commentsToAdd.length;
         
         postsWithComments.push({
           post: post.data,
-          comments: comments
+          comments: commentsToAdd
         });
         
-        console.log(`    ✓ ${comments.length} comments fetched | Total: ${totalComments}`);
+        console.log(`    ✓ ${commentsToAdd.length} top comments added | Total: ${totalComments}`);
+        
+        // Stop if we've hit the limit
+        if (totalComments >= MAX_COMMENTS) {
+          console.log(`  ✓ Reached ${MAX_COMMENTS} comment limit`);
+          break;
+        }
         
         await new Promise(resolve => setTimeout(resolve, 700));
       }
