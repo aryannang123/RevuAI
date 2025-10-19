@@ -236,12 +236,36 @@ export default function Home() {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  
+  // Search History States
+  const [searchHistory, setSearchHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const items = useMemo(() => [
     { label: "Home", href: "/" },
     { label: "About", href: "/about" },
     { label: "Contact", href: "/contact" },
   ], []);
+
+  // Fetch search history for the user
+  const fetchSearchHistory = useCallback(async (userId: string) => {
+    if (!userId) return;
+    
+    setLoadingHistory(true);
+    try {
+      const response = await fetch(`/api/searches?userId=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSearchHistory(data.searches || []);
+      } else {
+        console.error('Failed to fetch search history');
+      }
+    } catch (err) {
+      console.error('Error fetching search history:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -251,10 +275,12 @@ export default function Home() {
       } else {
         setIsAuthenticated(true);
         setUser(user);
+        // Fetch search history when user is authenticated
+        await fetchSearchHistory(user.id);
       }
     };
     checkAuth();
-  }, [router]);
+  }, [router, fetchSearchHistory]);
 
   const downloadAsJSON = (data: any, queryName: string) => {
     const jsonString = JSON.stringify(data, null, 2);
@@ -291,36 +317,75 @@ export default function Home() {
     return [flatComment, ...childComments];
   };
 
-  // Fetch comments for a single post
-  const fetchCommentsForPost = async (permalink: string, postId: string): Promise<any[]> => {
-    try {
-      // Fetch with sort=top to get highest scored comments
-      const response = await fetch(`/api/reddit/comments?permalink=${encodeURIComponent(permalink)}&limit=100&sort=top`);
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch comments for ${postId}`);
-        return [];
+  // Fetch comments for a single post with retry mechanism
+  const fetchCommentsForPost = async (permalink: string, postId: string, retries = 2): Promise<any[]> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        // Add more detailed logging
+        console.log(`Attempt ${attempt + 1}/${retries + 1}: Fetching comments for post ${postId}`);
+        
+        // Fetch with sort=top to get highest scored comments
+        const response = await fetch(`/api/reddit/comments?permalink=${encodeURIComponent(permalink)}&limit=100&sort=top`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Failed to fetch comments for ${postId} (attempt ${attempt + 1}):`, {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText
+          });
+          
+          // If it's a rate limit error (429) or server error (5xx), retry
+          if ((response.status === 429 || response.status >= 500) && attempt < retries) {
+            const delay = Math.pow(2, attempt) * 1000; // Exponential backoff
+            console.log(`Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          
+          return [];
+        }
+        
+        const data = await response.json();
+        
+        // Check if there's an error in the response
+        if (data.error) {
+          console.error(`API returned error for ${postId}:`, data.error);
+          return [];
+        }
+        
+        const allComments: any[] = [];
+        
+        if (data.comments && data.comments.length > 0) {
+          data.comments.forEach((comment: any) => {
+            const flattened = flattenComments(comment);
+            allComments.push(...flattened);
+          });
+        }
+        
+        console.log(`✓ Successfully fetched ${allComments.length} comments for post ${postId}`);
+        
+        // Sort by score and take top 100
+        return allComments
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 100);
+        
+      } catch (err) {
+        console.error(`Error fetching comments for ${postId} (attempt ${attempt + 1}):`, err);
+        
+        // If it's the last attempt, return empty array
+        if (attempt === retries) {
+          return [];
+        }
+        
+        // Wait before retrying
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-      
-      const data = await response.json();
-      const allComments: any[] = [];
-      
-      if (data.comments && data.comments.length > 0) {
-        data.comments.forEach((comment: any) => {
-          const flattened = flattenComments(comment);
-          allComments.push(...flattened);
-        });
-      }
-      
-      // Sort by score and take top 100
-      return allComments
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 100);
-      
-    } catch (err) {
-      console.error(`Error fetching comments for ${postId}:`, err);
-      return [];
     }
+    
+    return [];
   };
 
   // Save to file in pre-process directory
@@ -430,12 +495,18 @@ export default function Home() {
         const post = allPosts[i];
         setProgress({ 
           current: i + 1, 
-          total: Math.min(allPosts.length, Math.ceil(MAX_COMMENTS / COMMENTS_PER_POST))
+          total: Math.min(allPosts.length, 240)
         });
         
         console.log(`  Post ${i + 1}: "${post.data.title.substring(0, 50)}..." | Fetching top 100 comments`);
         
         const comments = await fetchCommentsForPost(post.data.permalink, post.data.id);
+        
+        // Skip posts that have no comments (might be deleted, private, or failed to fetch)
+        if (comments.length === 0) {
+          console.log(`    ⚠️ No comments found for post ${i + 1}, skipping...`);
+          continue;
+        }
         
         // Add comments (max 100 per post)
         const commentsToAdd = comments.slice(0, Math.min(COMMENTS_PER_POST, MAX_COMMENTS - totalComments));
@@ -501,10 +572,37 @@ export default function Home() {
         }))
       };
 
-      // Save to pre-process directory
+      // Save to pre-process directory (keep existing functionality)
       await saveToFile(processedData, searchQuery);
       
-      setSuccess(`🎉 Saved ${postsWithComments.length} posts with ${totalComments.toLocaleString()} comments to pre-process/`);
+      // Save to database
+      try {
+        const response = await fetch('/api/searches', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            userEmail: user.email,
+            searchQuery: searchQuery
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('✓ Search saved to database:', result.search.id);
+          // Refresh search history
+          await fetchSearchHistory(user.id);
+        } else {
+          console.error('Failed to save to database:', await response.text());
+        }
+      } catch (dbError) {
+        console.error('Database save error:', dbError);
+        // Don't fail the entire process if database save fails
+      }
+      
+      setSuccess(`🎉 Saved ${postsWithComments.length} posts with ${totalComments.toLocaleString()} comments to database and pre-process/`);
       setSearchQuery("");
       
     } catch (err: any) {
@@ -539,10 +637,10 @@ export default function Home() {
         .gooey-nav-container nav ul { display: flex; gap: 2em; list-style: none; padding: 0 1em; margin: 0; position: relative; z-index: 3; color: white; text-shadow: 0 1px 1px hsl(205deg 30% 10% / 0.2); }
         .gooey-nav-container nav ul li { border-radius: 100vw; position: relative; cursor: pointer; transition: color 0.3s ease; color: white; }
         .gooey-nav-container nav ul li a { display: inline-block; padding: 0.6em 1em; text-decoration: none; color: inherit; }
-        .gooey-nav-container nav ul li.active { color: black; text-shadow: none; }
+        .gooey-nav-container nav ul li.active { color: white; text-shadow: 0 1px 1px hsl(205deg 30% 10% / 0.2); }
         .gooey-nav-container .effect { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 1; pointer-events: none; display: grid; place-items: center; z-index: 1; }
         .gooey-nav-container .effect.text { color: white; transition: color 0.3s ease; }
-        .gooey-nav-container .effect.text.active { color: black; }
+        .gooey-nav-container .effect.text.active { color: white; }
         .gooey-nav-container .effect.filter { filter: blur(7px) contrast(100) blur(0); mix-blend-mode: lighten; }
         .gooey-nav-container .effect.filter::before { content: ''; position: absolute; inset: -75px; z-index: -2; background: radial-gradient(circle at center, rgba(255,255,255,0.15), transparent 70%); }
         .gooey-nav-container .effect.filter::after { content: ''; position: absolute; inset: 0; background: white; transform: scale(0); opacity: 0; z-index: -1; border-radius: 100vw; }
@@ -586,6 +684,45 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* Search History Section */}
+            <div className="flex-1 overflow-hidden">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-white font-medium text-sm">Search History</h3>
+                {loadingHistory && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-cyan-400 border-t-transparent"></div>
+                )}
+              </div>
+              
+              <div className="space-y-2 overflow-y-auto max-h-96 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+                {searchHistory.length === 0 ? (
+                  <p className="text-white/50 text-xs italic">No searches yet</p>
+                ) : (
+                  searchHistory.map((search, index) => (
+                    <div 
+                      key={search.id} 
+                      className="bg-white/5 rounded-lg p-3 border border-white/10 hover:bg-white/10 transition-colors cursor-pointer"
+                      onClick={() => setSearchQuery(search.search_query)}
+                    >
+                      <p className="text-white/90 text-sm font-medium truncate" title={search.search_query}>
+                        {search.search_query}
+                      </p>
+                      <p className="text-white/50 text-xs mt-1">
+                        {new Date(search.created_at).toLocaleDateString()}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`inline-block w-2 h-2 rounded-full ${
+                          search.status === 'completed' ? 'bg-green-400' : 
+                          search.status === 'processing' ? 'bg-yellow-400' : 
+                          search.status === 'failed' ? 'bg-red-400' : 'bg-gray-400'
+                        }`}></span>
+                        <span className="text-white/60 text-xs capitalize">{search.status}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
             <div className="mt-auto pb-6">
               <button onClick={async () => { await signOut(); router.push("/login"); }} className="w-full bg-red-500/20 hover:bg-red-500/30 text-white px-4 py-3 rounded-lg border border-red-500/50 transition-all duration-300 shadow-[0_0_15px_rgba(255,0,0,0.2)] hover:shadow-[0_0_25px_rgba(255,0,0,0.4)] flex items-center justify-center gap-2 text-sm font-medium">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
