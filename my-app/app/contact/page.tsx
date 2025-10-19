@@ -30,6 +30,7 @@ export default function ContactPage() {
       github: "amogh-2007",
       githubUrl: "https://github.com/amogh-2007",
       email: "amoghherle07@gmail.com",
+      avatarUrl: "/images.jpeg"
     },
     {
       name: "Gagan",
@@ -82,8 +83,9 @@ export default function ContactPage() {
               handle={member.github}
               email={member.email}
               githubUrl={member.githubUrl}
-              handleColor={member.name === "Eshwar" ? "black" : "rgba(0, 255, 255, 0.9)"}
-              emailColor={member.name === "Eshwar" ? "black" : "rgba(255, 255, 255, 0.6)"}
+              handleColor={member.name === "Eshwar" || member.name === "Amogh" ? "black" : "rgba(0, 255, 255, 0.9)"}
+              emailColor={member.name === "Eshwar" || member.name === "Amogh" ? "black" : "rgba(255, 255, 255, 0.6)"}
+              backgroundImage={member.avatarUrl || ""}
               contactText="GitHub"
               showUserInfo={true}
               enableTilt={true}
@@ -103,7 +105,7 @@ export default function ContactPage() {
                 href={member.githubUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`hover:underline block ${member.name === "Eshwar"
+                className={`hover:underline block ${member.name === "Eshwar" || member.name === "Amogh"
                   ? "text-black"
                   : "text-cyan-400"
                   }`}
@@ -112,7 +114,7 @@ export default function ContactPage() {
               </a>
               <a
                 href={`mailto:${member.email}`}
-                className={`text-sm hover:underline block ${member.name === "Eshwar"
+                className={`text-sm hover:underline block ${member.name === "Eshwar" || member.name === "Amogh"
                   ? "text-black hover:text-gray-800"
                   : "text-white/70 hover:text-cyan-400"
                   }`}

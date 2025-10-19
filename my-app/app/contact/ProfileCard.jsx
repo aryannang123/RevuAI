@@ -43,6 +43,7 @@ const ProfileCardComponent = ({
   githubUrl = '',
   handleColor = 'rgba(0, 255, 255, 0.9)',
   emailColor = 'rgba(255, 255, 255, 0.6)',
+  backgroundImage = '',
   contactText = 'Contact',
   showUserInfo = true,
   onContactClick = null
@@ -243,9 +244,13 @@ const ProfileCardComponent = ({
       '--icon': iconUrl ? `url(${iconUrl})` : 'none',
       '--grain': grainUrl ? `url(${grainUrl})` : 'none',
       '--behind-gradient': showBehindGradient ? (behindGradient ?? DEFAULT_BEHIND_GRADIENT) : 'none',
-      '--inner-gradient': innerGradient ?? DEFAULT_INNER_GRADIENT
+      '--inner-gradient': innerGradient ?? DEFAULT_INNER_GRADIENT,
+      backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat'
     }),
-    [iconUrl, grainUrl, showBehindGradient, behindGradient, innerGradient]
+    [iconUrl, grainUrl, showBehindGradient, behindGradient, innerGradient, backgroundImage]
   );
 
   const handleContactClick = useCallback(() => {
@@ -301,7 +306,6 @@ const ProfileCardComponent = ({
             <div className="pc-details">
               <h3>{name}</h3>
               <p>{title}</p>
-
             </div>
           </div>
         </div>
