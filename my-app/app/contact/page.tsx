@@ -31,7 +31,7 @@ export default function ContactPage() {
       github: "amogh-2007",
       githubUrl: "https://github.com/amogh-2007",
       email: "amoghherle07@gmail.com",
-      avatarUrl: "/images.jpeg"
+      avatarUrl: "/zeinitsu.jpeg"
     },
     {
       name: "Gagan",
