@@ -294,7 +294,7 @@ export default function Home() {
   // Fetch comments for a single post
   const fetchCommentsForPost = async (permalink: string, postId: string): Promise<any[]> => {
     try {
-      const response = await fetch(`/api/reddit/comments?permalink=${encodeURIComponent(permalink)}&limit=500&depth=10`);
+      const response = await fetch(`/api/reddit/comments?permalink=${encodeURIComponent(permalink)}&limit=200&depth=5`);
       
       if (!response.ok) {
         console.error(`Failed to fetch comments for ${postId}`);
@@ -318,6 +318,35 @@ export default function Home() {
     }
   };
 
+  // Save to file in pre-process directory
+  const saveToFile = async (data: any, queryName: string) => {
+    try {
+      const fileName = `reddit_${queryName.replace(/\s+/g, '_')}_${Date.now()}.json`;
+      
+      const response = await fetch('/api/save-file', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: fileName,
+          data: data
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save file');
+      }
+
+      const result = await response.json();
+      console.log(`✓ File saved: ${result.path}`);
+      return result;
+    } catch (err) {
+      console.error('Error saving file:', err);
+      throw err;
+    }
+  };
+
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
       setError("Please enter a search query");
@@ -332,61 +361,46 @@ export default function Home() {
     try {
       const allPostsMap = new Map();
       
-      // SIMPLIFIED: Only relevance + comments (top 2 strategies)
-      const strategies = [
-        { sort: 'relevance', t: 'all', pages: 5 },
-        { sort: 'comments', t: 'all', pages: 5 }
-      ];
+      // SIMPLIFIED: Only relevance sort to get ~240 posts
+      console.log(`🚀 PHASE 1: Fetching relevant posts for "${searchQuery}"`);
       
-      const totalPostFetches = strategies.reduce((sum, s) => sum + s.pages, 0);
-      let currentFetch = 0;
-
-      console.log(`🚀 PHASE 1: Fetching high-engagement posts for "${searchQuery}"`);
-
-      for (const strategy of strategies) {
-        let after: string | null = null;
+      let after: string | null = null;
+      const maxPages = 3; // 3 pages * 100 = ~240-300 posts
+      
+      for (let page = 0; page < maxPages; page++) {
+        setProgress({ current: page + 1, total: maxPages });
         
-        for (let page = 0; page < strategy.pages; page++) {
-          currentFetch++;
-          setProgress({ current: currentFetch, total: totalPostFetches });
+        let url = `/api/reddit?query=${encodeURIComponent(searchQuery.trim())}&limit=100&sort=relevance&t=all`;
+        if (after) url += `&after=${after}`;
+
+        try {
+          const response = await fetch(url);
+          if (!response.ok) break;
+
+          const data = await response.json();
           
-          let url = `/api/reddit?query=${encodeURIComponent(searchQuery.trim())}&limit=100&sort=${strategy.sort}&t=${strategy.t}`;
-          if (after) url += `&after=${after}`;
-
-          try {
-            const response = await fetch(url);
-            if (!response.ok) break;
-
-            const data = await response.json();
+          if (data.posts && data.posts.length > 0) {
+            data.posts.forEach((post: any) => {
+              allPostsMap.set(post.data.id, post);
+            });
             
-            if (data.posts && data.posts.length > 0) {
-              data.posts.forEach((post: any) => {
-                allPostsMap.set(post.data.id, post);
-              });
-              
-              after = data.after;
-              if (!after) break;
-            } else {
-              break;
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 800));
-          } catch (err) {
-            console.error(`Error fetching posts:`, err);
+            console.log(`  Page ${page + 1}: +${data.posts.length} posts | Total: ${allPostsMap.size}`);
+            
+            after = data.after;
+            if (!after) break;
+          } else {
             break;
           }
+
+          await new Promise(resolve => setTimeout(resolve, 800));
+        } catch (err) {
+          console.error(`Error fetching posts:`, err);
+          break;
         }
       }
 
-      let allPosts = Array.from(allPostsMap.values());
-      
-      // Sort by comment count and take top 100 posts with most comments
-      allPosts = allPosts
-        .sort((a, b) => b.data.num_comments - a.data.num_comments)
-        .slice(0, 100);
-      
-      console.log(`✓ PHASE 1 complete: Selected top 100 posts (sorted by comment count)`);
-      console.log(`  Average comments per post: ${Math.round(allPosts.reduce((sum, p) => sum + p.data.num_comments, 0) / allPosts.length)}`);
+      const allPosts = Array.from(allPostsMap.values());
+      console.log(`✓ PHASE 1 complete: ${allPosts.length} posts fetched`);
 
       if (allPosts.length === 0) {
         setError("No posts found for this query");
@@ -394,22 +408,41 @@ export default function Home() {
         return;
       }
 
-      // PHASE 2: Fetch Comments for top 100 posts
-      console.log(`\n🚀 PHASE 2: Fetching comments for top 100 posts with most engagement`);
+      // PHASE 2: Fetch Comments (stop at 5k total)
+      console.log(`\n🚀 PHASE 2: Fetching comments (max 5,000 total)`);
       
       const postsWithComments: any[] = [];
       let totalComments = 0;
+      const MAX_COMMENTS = 5000;
 
       for (let i = 0; i < allPosts.length; i++) {
+        if (totalComments >= MAX_COMMENTS) {
+          console.log(`  ⚠️ Reached 5k comment limit at post ${i + 1}`);
+          break;
+        }
+
         const post = allPosts[i];
         setProgress({ 
           current: i + 1, 
           total: allPosts.length 
         });
         
-        console.log(`  Post ${i + 1}/100: "${post.data.title.substring(0, 50)}..." (${post.data.num_comments} comments)`);
+        console.log(`  Post ${i + 1}/${allPosts.length}: "${post.data.title.substring(0, 50)}..." (${post.data.num_comments} comments listed)`);
         
         const comments = await fetchCommentsForPost(post.data.permalink, post.data.id);
+        
+        // Check if adding these comments would exceed limit
+        if (totalComments + comments.length > MAX_COMMENTS) {
+          const remaining = MAX_COMMENTS - totalComments;
+          console.log(`  ⚠️ Taking only ${remaining} comments from this post to stay under 5k`);
+          postsWithComments.push({
+            post: post.data,
+            comments: comments.slice(0, remaining)
+          });
+          totalComments += remaining;
+          break;
+        }
+        
         totalComments += comments.length;
         
         postsWithComments.push({
@@ -417,13 +450,12 @@ export default function Home() {
           comments: comments
         });
         
-        console.log(`    ✓ ${comments.length} comments fetched | Total so far: ${totalComments}`);
+        console.log(`    ✓ ${comments.length} comments fetched | Total: ${totalComments}`);
         
-        // Faster rate limiting
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 700));
       }
 
-      console.log(`✓ PHASE 2 complete: ${totalComments} total comments fetched from 100 top posts`);
+      console.log(`✓ PHASE 2 complete: ${totalComments} total comments from ${postsWithComments.length} posts`);
 
       const processedData = {
         metadata: {
@@ -433,8 +465,8 @@ export default function Home() {
           totalComments: totalComments,
           averageCommentsPerPost: Math.round(totalComments / postsWithComments.length),
           source: 'Reddit API',
-          fetchStrategy: 'Top 100 posts by relevance & comment count',
-          note: 'Focused on high-engagement posts with complete comment threads'
+          fetchStrategy: 'Relevance-based with 5k comment limit',
+          note: 'Optimized for analysis - relevant posts with max 5k comments'
         },
         postsWithComments: postsWithComments.map(item => ({
           post: {
@@ -467,9 +499,10 @@ export default function Home() {
         }))
       };
 
-      downloadAsJSON(processedData, searchQuery);
+      // Save to pre-process directory
+      await saveToFile(processedData, searchQuery);
       
-      setSuccess(`🎉 Fetched 100 high-engagement posts with ${totalComments.toLocaleString()} comments! File downloaded.`);
+      setSuccess(`🎉 Saved ${postsWithComments.length} posts with ${totalComments.toLocaleString()} comments to pre-process/`);
       setSearchQuery("");
       
     } catch (err: any) {
@@ -595,7 +628,7 @@ export default function Home() {
               <div className="bg-white/5 rounded-lg p-5 border border-cyan-400/30 shadow-[0_0_20px_rgba(0,255,255,0.2)]">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-white/90 text-sm font-medium">
-                    {progress.total <= 30 ? '📊 Fetching Posts' : '💬 Fetching Comments'}: {progress.current} / {progress.total}
+                    {progress.total <= 3 ? '📊 Fetching Posts' : '💬 Fetching Comments (Max 5k)'}: {progress.current} / {progress.total}
                   </span>
                   <span className="text-cyan-400 text-sm font-bold">
                     {Math.round((progress.current / progress.total) * 100)}%
@@ -608,17 +641,17 @@ export default function Home() {
                   />
                 </div>
                 <p className="text-white/70 text-xs leading-relaxed">
-                  {progress.total <= 30 ? (
-                    <>🔄 Phase 1: Fetching posts from multiple strategies...</>
+                  {progress.total <= 3 ? (
+                    <>🔄 Phase 1: Fetching ~240 relevant posts...</>
                   ) : (
-                    <>💬 Phase 2: Fetching comment threads for analysis...</>
+                    <>💬 Phase 2: Extracting comments (stops at 5k total)...</>
                   )}
                   <br/>
-                  ⏱️ This will take 3-5 minutes for complete data with comments
+                  ⏱️ Estimated time: ~1-2 minutes
                 </p>
                 <div className="mt-3 pt-3 border-t border-white/10">
                   <p className="text-cyan-300 text-xs font-medium">
-                    💡 Fetching posts + all their comments for deep analysis
+                    💡 Saving to: my-app/pre-process/
                   </p>
                 </div>
               </div>
@@ -643,7 +676,7 @@ export default function Home() {
                   </svg>
                   <p className="text-green-200 text-sm font-medium">{success}</p>
                 </div>
-                <p className="text-green-300/80 text-xs">Check your Downloads folder 📁</p>
+                <p className="text-green-300/80 text-xs">Check my-app/pre-process/ folder 📁</p>
               </div>
             )}
           </div>

@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Environment variables
 .env.local
+
+#pre-processed data
+/pre-process/*.json
