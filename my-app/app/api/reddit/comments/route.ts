@@ -3,7 +3,21 @@
 
 import { NextResponse } from 'next/server';
 
+// Token cache - shared across requests
+let tokenCache: {
+  accessToken: string;
+  expiresAt: number;
+} | null = null;
+
 async function getAccessToken() {
+  // Check if we have a valid cached token
+  if (tokenCache && Date.now() < tokenCache.expiresAt) {
+    console.log('Using cached Reddit access token (comments)');
+    return tokenCache.accessToken;
+  }
+
+  console.log('Fetching new Reddit access token (comments)');
+  
   const clientId = process.env.REDDIT_CLIENT_ID;
   const clientSecret = process.env.REDDIT_CLIENT_SECRET;
   const username = process.env.REDDIT_USERNAME;
@@ -31,7 +45,13 @@ async function getAccessToken() {
   }
 
   const data = await response.json();
-  return data.access_token;
+  
+  tokenCache = {
+    accessToken: data.access_token,
+    expiresAt: Date.now() + ((data.expires_in - 300) * 1000)
+  };
+
+  return tokenCache.accessToken;
 }
 
 export async function GET(request: Request) {

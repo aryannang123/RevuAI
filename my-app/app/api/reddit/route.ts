@@ -1,6 +1,20 @@
 import { NextResponse } from 'next/server';
 
+let tokenCache: {
+  accessToken: string;
+  expiresAt: number;
+} | null = null;
+
 async function getAccessToken() {
+  // Check if we have a valid cached token
+  if (tokenCache && Date.now() < tokenCache.expiresAt) {
+    console.log('Using cached Reddit access token');
+    return tokenCache.accessToken;
+  }
+
+  // Token expired or doesn't exist, fetch a new one
+  console.log('Fetching new Reddit access token');
+  
   const clientId = process.env.REDDIT_CLIENT_ID;
   const clientSecret = process.env.REDDIT_CLIENT_SECRET;
   const username = process.env.REDDIT_USERNAME;
@@ -12,8 +26,8 @@ async function getAccessToken() {
 
   const authString = `${clientId}:${clientSecret}`;
   const encodedAuthString = Buffer.from(authString).toString('base64');
-
   const tokenUrl = 'https://www.reddit.com/api/v1/access_token';
+
   const response = await fetch(tokenUrl, {
     method: 'POST',
     headers: {
@@ -26,12 +40,20 @@ async function getAccessToken() {
 
   if (!response.ok) {
     const errorBody = await response.text();
-    console.error("Failed to get Reddit access token:", response.status, errorBody);
-    throw new Error('Failed to authenticate with Reddit API.');
+    console.error("Failed to get Reddit access token:", errorBody);
+    throw new Error(`Failed to authenticate with Reddit: ${response.statusText}`);
   }
 
   const data = await response.json();
-  return data.access_token;
+  
+  // Cache the token with expiration (Reddit tokens typically last 3600 seconds = 1 hour)
+  // Subtract 5 minutes (300 seconds) as a safety buffer to refresh before actual expiry
+  tokenCache = {
+    accessToken: data.access_token,
+    expiresAt: Date.now() + ((data.expires_in - 300) * 1000)
+  };
+
+  return tokenCache.accessToken;
 }
 
 export async function GET(request: Request) {
