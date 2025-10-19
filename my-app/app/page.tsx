@@ -514,7 +514,10 @@ export default function Home() {
   }, [searchQuery]);
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !isLoading) handleSearch();
+    if (e.key === "Enter" && !isLoading) {
+      e.preventDefault();
+      handleSearch();
+    }
   }, [handleSearch, isLoading]);
 
   if (isAuthenticated === null) {
@@ -602,58 +605,41 @@ export default function Home() {
           </div>
           
           <div className="mt-8 pointer-events-auto w-[420px] max-w-[90%] relative">
-            <input 
-              type="text" 
-              placeholder="Search Reddit for data..." 
-              value={searchQuery} 
-              onChange={(e) => setSearchQuery(e.target.value)} 
-              onKeyDown={handleKeyPress} 
-              disabled={isLoading} 
-              className="w-full px-6 py-4 pr-14 rounded-full bg-white/10 backdrop-blur-md border border-cyan-300/50 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 shadow-[0_0_20px_rgba(0,255,255,0.3)] text-lg transition-all duration-300 disabled:opacity-50" 
-            />
-            <button 
-              onClick={handleSearch} 
-              disabled={isLoading} 
-              className="absolute top-1/2 right-1.5 -translate-y-1/2 bg-cyan-400/30 rounded-full p-3 text-white shadow-[0_0_15px_rgba(0,255,255,0.3)] hover:bg-cyan-400/50 transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            </button>
+            <form onSubmit={(e) => { e.preventDefault(); if (!isLoading) handleSearch(); }} className="w-full">
+              <input 
+                type="text" 
+                placeholder="Search Reddit for data..." 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)} 
+                onKeyDown={handleKeyPress} 
+                disabled={isLoading} 
+                className="w-full px-6 py-4 pr-14 rounded-full bg-white/10 backdrop-blur-md border border-cyan-300/50 text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 shadow-[0_0_20px_rgba(0,255,255,0.3)] text-lg transition-all duration-300 disabled:opacity-50" 
+              />
+              <button 
+                type="submit"
+                disabled={isLoading} 
+                className="absolute top-1/2 right-1.5 -translate-y-1/2 bg-cyan-400/30 rounded-full p-3 text-white shadow-[0_0_15px_rgba(0,255,255,0.3)] hover:bg-cyan-400/50 transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                </svg>
+              </button>
+            </form>
           </div>
 
           {/* Status Messages */}
           <div className="mt-6 text-center pointer-events-auto w-[500px] max-w-[90%]">
             {isLoading && (
-              <div className="bg-white/5 rounded-lg p-5 border border-cyan-400/30 shadow-[0_0_20px_rgba(0,255,255,0.2)]">
-                <div className="flex items-center justify-between mb-3">
+              <div className="bg-white/5 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_20px_rgba(0,255,255,0.2)]">
+                <div className="flex items-center justify-center gap-3 mb-2">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-cyan-400 border-t-transparent"></div>
                   <span className="text-white/90 text-sm font-medium">
-                    {progress.total <= 3 ? '📊 Fetching Posts' : '💬 Fetching Comments (Max 5k)'}: {progress.current} / {progress.total}
-                  </span>
-                  <span className="text-cyan-400 text-sm font-bold">
-                    {Math.round((progress.current / progress.total) * 100)}%
+                    {progress.total <= 3 ? 'Fetching posts...' : `Fetching comments... (${progress.current}/${progress.total})`}
                   </span>
                 </div>
-                <div className="w-full bg-white/10 rounded-full h-2.5 overflow-hidden mb-3">
-                  <div
-                    className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 h-full transition-all duration-500 ease-out"
-                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                  />
-                </div>
-                <p className="text-white/70 text-xs leading-relaxed">
-                  {progress.total <= 3 ? (
-                    <>🔄 Phase 1: Fetching ~240 relevant posts...</>
-                  ) : (
-                    <>💬 Phase 2: Extracting comments (stops at 5k total)...</>
-                  )}
-                  <br/>
-                  ⏱️ Estimated time: ~1-2 minutes
+                <p className="text-white/60 text-xs">
+                  This may take 1-2 minutes
                 </p>
-                <div className="mt-3 pt-3 border-t border-white/10">
-                  <p className="text-cyan-300 text-xs font-medium">
-                    💡 Saving to: my-app/pre-process/
-                  </p>
-                </div>
               </div>
             )}
 
