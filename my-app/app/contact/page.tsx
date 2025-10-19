@@ -24,6 +24,7 @@ export default function ContactPage() {
       github: "aryannang123",
       githubUrl: "https://github.com/aryannang123",
       email: "aryannangarath407@gmail.com",
+      avatarUrl: "/akaza.jpg"
     },
     {
       name: "Amogh",
@@ -83,8 +84,8 @@ export default function ContactPage() {
               handle={member.github}
               email={member.email}
               githubUrl={member.githubUrl}
-              handleColor={member.name === "Eshwar" || member.name === "Amogh" ? "black" : "rgba(0, 255, 255, 0.9)"}
-              emailColor={member.name === "Eshwar" || member.name === "Amogh" ? "black" : "rgba(255, 255, 255, 0.6)"}
+              handleColor={member.name === "Eshwar" || member.name === "Amogh" || member.name === "Aryan" ? "black" : "rgba(0, 255, 255, 0.9)"}
+              emailColor={member.name === "Eshwar" || member.name === "Amogh" || member.name === "Aryan" ? "black" : "rgba(255, 255, 255, 0.6)"}
               backgroundImage={member.avatarUrl || ""}
               contactText="GitHub"
               showUserInfo={true}
@@ -105,7 +106,7 @@ export default function ContactPage() {
                 href={member.githubUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`hover:underline block ${member.name === "Eshwar" || member.name === "Amogh"
+                className={`hover:underline block ${member.name === "Eshwar" || member.name === "Amogh" || member.name === "Aryan"
                   ? "text-black"
                   : "text-cyan-400"
                   }`}
@@ -114,7 +115,7 @@ export default function ContactPage() {
               </a>
               <a
                 href={`mailto:${member.email}`}
-                className={`text-sm hover:underline block ${member.name === "Eshwar" || member.name === "Amogh"
+                className={`text-sm hover:underline block ${member.name === "Eshwar" || member.name === "Amogh" || member.name === "Aryan"
                   ? "text-black hover:text-gray-800"
                   : "text-white/70 hover:text-cyan-400"
                   }`}
