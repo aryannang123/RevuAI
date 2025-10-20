@@ -1,0 +1,20 @@
+# Python files
+*.pyc
+__pycache__/
+venv/
+env/
+ENV/
+build/
+dist/
+.eggs/
+*.egg-info/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Flask
+instance/
+.webassets-cache
+
+# Local env files
+.env
+.DS_Store

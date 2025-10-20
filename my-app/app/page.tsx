@@ -12,6 +12,8 @@ import { Renderer, Program, Mesh, Triangle } from 'ogl';
 // --- AUTH LOGIC ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const PYTHON_BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:5000';
+
 
 let supabase: any;
 if (supabaseUrl && supabaseAnonKey) {
@@ -300,19 +302,20 @@ export default function Home() {
   const fetchSearchHistory = useCallback(async (userId: string) => {
     if (!userId) return;
     
-    setLoadingHistory(true);
-    try {
-      const response = await fetch(`/api/searches?userId=${userId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setSearchHistory(data.searches || []);
-      }
-    } catch (err) {
-      console.error('Error fetching search history:', err);
-    } finally {
-      setLoadingHistory(false);
+  setLoadingHistory(true);
+  try {
+    // Make request to fetch user's search history
+    const response = await fetch(`/api/searches?userId=${encodeURIComponent(userId)}`);
+    if (response.ok) {
+      const data = await response.json();
+      setSearchHistory(data.searches || []);
     }
-  }, []);
+  } catch (err) {
+    console.error('Error fetching search history:', err);
+  } finally {
+    setLoadingHistory(false);
+  }
+}, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -407,7 +410,10 @@ export default function Home() {
         setProgress({ current: strategies.indexOf(strategy) + 1, total: strategies.length });
         
         for (let page = 0; page < strategy.pages; page++) {
-          let url = `/api/reddit?query=${encodeURIComponent(searchQuery.trim())}&limit=100&sort=${strategy.sort}&t=${strategy.t}`;
+          // NEW - Point to Python backend
+          const PYTHON_BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:5000';
+          let url = `${PYTHON_BACKEND_URL}/api/reddit?query=${encodeURIComponent(searchQuery.trim())}&limit=100&sort=${strategy.sort}&t=${strategy.t}`;
+
           if (after) url += `&after=${after}`;
 
           const response = await fetch(url);

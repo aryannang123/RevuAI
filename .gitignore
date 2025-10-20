@@ -1,0 +1,13 @@
+# Node modules and builds (for all JS projects)
+node_modules/
+.next/
+out/
+
+# Python
+*.pyc
+__pycache__/
+.env
+venv/
+# Mac/Windows/Linux
+.DS_Store
+Thumbs.db
