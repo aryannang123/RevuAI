@@ -381,221 +381,92 @@ export default function Home() {
     }
   }, []);
 
-  const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) {
-      setError("Please enter a search query");
-      return;
+  // Replace your handleSearch function in page.tsx with this:
+
+const handleSearch = useCallback(async () => {
+  if (!searchQuery.trim()) {
+    setError("Please enter a search query");
+    return;
+  }
+
+  setIsLoading(true);
+  setError(null);
+  setSuccess(null);
+  setProgress({ current: 0, total: 100 });
+
+  try {
+    console.log(`🚀 Sending request to Python backend for: "${searchQuery}"`);
+    
+    // Call Python backend
+    const BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:5000';
+    
+    const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-optimized`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: searchQuery.trim(),
+        num_posts: 35,
+        max_comments: 5000
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch data from Python backend');
     }
 
-    setIsLoading(true);
-    setError(null);
-    setSuccess(null);
-    setProgress({ current: 0, total: 0 });
+    setProgress({ current: 90, total: 100 });
+    console.log('✓ Received data from Python backend');
 
+    const processedData = await response.json();
+
+    console.log(`✓ Data received:`, {
+      posts: processedData.metadata.totalPosts,
+      comments: processedData.metadata.totalComments
+    });
+
+    // Save to file
+    await saveToFile(processedData, searchQuery);
+    
+    setProgress({ current: 95, total: 100 });
+
+    // Save to database
     try {
-      // PHASE 1: Get high-engagement posts
-      console.log(`🚀 PHASE 1: Fetching high-engagement posts for "${searchQuery}"`);
-      
-      const allPostsMap = new Map();
-      let after: string | null = null;
-      
-      const strategies = [
-        { sort: 'top', t: 'month', pages: 1 },
-        { sort: 'top', t: 'year', pages: 1 },
-        { sort: 'relevance', t: 'all', pages: 1 }
-      ];
-      
-      for (const strategy of strategies) {
-        after = null;
-        setProgress({ current: strategies.indexOf(strategy) + 1, total: strategies.length });
-        
-        for (let page = 0; page < strategy.pages; page++) {
-          // NEW - Point to Python backend
-          const PYTHON_BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:5000';
-          let url = `${PYTHON_BACKEND_URL}/api/reddit?query=${encodeURIComponent(searchQuery.trim())}&limit=100&sort=${strategy.sort}&t=${strategy.t}`;
+      const dbResponse = await fetch('/api/searches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          userEmail: user.email,
+          searchQuery: searchQuery
+        })
+      });
 
-          if (after) url += `&after=${after}`;
-
-          const response = await fetch(url);
-          if (!response.ok) break;
-
-          const data = await response.json();
-          
-          if (data.posts && data.posts.length > 0) {
-            data.posts.forEach((post: any) => {
-              allPostsMap.set(post.data.id, post);
-            });
-            after = data.after;
-            if (!after) break;
-          } else break;
-
-          await new Promise(resolve => setTimeout(resolve, 800));
-        }
+      if (dbResponse.ok) {
+        await fetchSearchHistory(user.id);
       }
-
-      let allPosts = Array.from(allPostsMap.values());
-      
-      allPosts = allPosts
-        .filter(p => p.data.num_comments >= 10)
-        .sort((a, b) => b.data.num_comments - a.data.num_comments)
-        .slice(0, 35);
-      
-      console.log(`✓ PHASE 1: Selected ${allPosts.length} high-engagement posts`);
-
-      if (allPosts.length === 0) {
-        setError("No posts found with sufficient engagement");
-        setIsLoading(false);
-        return;
-      }
-
-      // PHASE 2: Batch fetch comments
-      console.log(`\n🚀 PHASE 2: Fetching comments from ${allPosts.length} posts`);
-      
-      const MAX_COMMENTS = 5000;
-      const commentsPerPost = Math.ceil(MAX_COMMENTS / allPosts.length);
-      
-      const postsWithComments: any[] = [];
-      let totalComments = 0;
-      
-      const batchSize = 5;
-      for (let i = 0; i < allPosts.length; i += batchSize) {
-        const batch = allPosts.slice(i, Math.min(i + batchSize, allPosts.length));
-        
-        setProgress({ 
-          current: i + batch.length, 
-          total: allPosts.length 
-        });
-        
-        const batchPromises = batch.map(async (post) => {
-          if (totalComments >= MAX_COMMENTS) return null;
-          
-          try {
-            const response = await fetch(
-              `/api/reddit/comments?permalink=${encodeURIComponent(post.data.permalink)}&limit=${commentsPerPost}&sort=top`
-            );
-            
-            if (!response.ok) return null;
-            
-            const data = await response.json();
-            const allComments: any[] = [];
-            
-            if (data.comments && data.comments.length > 0) {
-              data.comments.forEach((comment: any) => {
-                const flattened = flattenComments(comment);
-                allComments.push(...flattened);
-              });
-            }
-            
-            const topComments = allComments
-              .sort((a, b) => b.score - a.score)
-              .slice(0, Math.min(commentsPerPost, MAX_COMMENTS - totalComments));
-            
-            return {
-              post: post.data,
-              comments: topComments
-            };
-          } catch (err) {
-            console.error(`Failed to fetch comments:`, err);
-            return null;
-          }
-        });
-        
-        const batchResults = await Promise.all(batchPromises);
-        
-        batchResults.forEach(result => {
-          if (result && result.comments.length > 0) {
-            totalComments += result.comments.length;
-            postsWithComments.push(result);
-          }
-        });
-        
-        if (totalComments >= MAX_COMMENTS) break;
-        
-        if (i + batchSize < allPosts.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-
-      console.log(`✓ PHASE 2: ${totalComments} total comments from ${postsWithComments.length} posts`);
-
-      const processedData = {
-        metadata: {
-          query: searchQuery,
-          fetchedAt: new Date().toISOString(),
-          totalPosts: postsWithComments.length,
-          totalComments: totalComments,
-          averageCommentsPerPost: Math.round(totalComments / postsWithComments.length),
-          source: 'Reddit API',
-          fetchStrategy: 'High-engagement posts with top comments',
-          note: 'Focused on posts with active discussions and quality comments'
-        },
-        postsWithComments: postsWithComments.map(item => ({
-          post: {
-            id: item.post.id,
-            title: item.post.title,
-            author: item.post.author,
-            subreddit: item.post.subreddit,
-            content: item.post.selftext,
-            upvotes: item.post.ups,
-            score: item.post.score,
-            commentCount: item.post.num_columns,
-            url: `https://reddit.com${item.post.permalink}`,
-            createdAt: new Date(item.post.created_utc * 1000).toISOString(),
-            mediaUrl: item.post.url,
-            thumbnail: item.post.thumbnail,
-            isVideo: item.post.is_video || false
-          },
-          comments: item.comments,
-          commentsSummary: {
-            total: item.comments.length,
-            topLevelComments: item.comments.filter((c: any) => c.depth === 0).length,
-            nestedComments: item.comments.filter((c: any) => c.depth > 0).length,
-            averageScore: item.comments.length > 0 
-              ? Math.round(item.comments.reduce((sum: number, c: any) => sum + c.score, 0) / item.comments.length)
-              : 0,
-            maxDepth: item.comments.length > 0
-              ? Math.max(...item.comments.map((c: any) => c.depth))
-              : 0,
-            minScore: item.comments.length > 0
-              ? Math.min(...item.comments.map((c: any) => c.score))
-              : 0,
-            maxScore: item.comments.length > 0
-              ? Math.max(...item.comments.map((c: any) => c.score))
-              : 0
-          }
-        }))
-      };
-
-      await saveToFile(processedData, searchQuery);
-      
-      try {
-        const response = await fetch('/api/searches', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            userEmail: user.email,
-            searchQuery: searchQuery
-          })
-        });
-
-        if (response.ok) {
-          await fetchSearchHistory(user.id);
-        }
-      } catch (dbError) {
-        console.error('Database save error:', dbError);
-      }
-      
-      setSuccess(`🎉 Saved ${postsWithComments.length} posts with ${totalComments.toLocaleString()} quality comments!`);
-      setSearchQuery("");
-      
-    } catch (err: any) {
-      setError(err.message || 'An error occurred while fetching data');
-      console.error('❌ Fetch error:', err);
-    } finally {
-      setIsLoading(false);
+    } catch (dbError) {
+      console.error('Database save error:', dbError);
+      // Don't fail if DB save fails
     }
-  }, [searchQuery, user, fetchSearchHistory, flattenComments, saveToFile]);
+    
+    setProgress({ current: 100, total: 100 });
+    
+    setSuccess(
+      `🎉 Saved ${processedData.metadata.totalPosts} posts with ` +
+      `${processedData.metadata.totalComments.toLocaleString()} quality comments!`
+    );
+    setSearchQuery("");
+    
+  } catch (err: any) {
+    console.error('❌ Fetch error:', err);
+    setError(err.message || 'An error occurred while fetching data');
+  } finally {
+    setIsLoading(false);
+  }
+}, [searchQuery, user, fetchSearchHistory, saveToFile]);
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !isLoading) {

@@ -188,142 +188,231 @@ class RedditAPIFetcher:
             'count': len(comments)
         }
 
-    def fetch_optimized_data(
+    def flatten_comment(self, comment_data: Dict, depth: int = 0) -> List[Dict]:
+        """
+        Recursively flatten nested Reddit comments
+        
+        Args:
+            comment_data: Comment data from Reddit API
+            depth: Current nesting depth
+            
+        Returns:
+            List of flattened comment dictionaries
+        """
+        if not comment_data or comment_data.get('kind') != 't1':
+            return []
+        
+        data = comment_data.get('data', {})
+        
+        # Base comment
+        flat_comment = {
+            'id': data.get('id'),
+            'author': data.get('author'),
+            'body': data.get('body', ''),
+            'score': data.get('score', 0),
+            'createdAt': datetime.fromtimestamp(data.get('created_utc', 0)).isoformat(),
+            'depth': depth,
+            'isSubmitter': data.get('is_submitter', False),
+            'distinguished': data.get('distinguished')
+        }
+        
+        result = [flat_comment]
+        
+        # Recursively process replies
+        replies = data.get('replies', {})
+        if isinstance(replies, dict) and 'data' in replies:
+            children = replies['data'].get('children', [])
+            for reply in children:
+                result.extend(self.flatten_comment(reply, depth + 1))
+        
+        return result
+
+    def fetch_optimized_data_v2(
         self,
         query: str,
         num_posts: int = 35,
-        comments_per_post: int = 143,
-        batch_size: int = 5,
+        max_comments: int = 5000,
         progress_callback=None
     ) -> Dict[str, Any]:
         """
-        Fetch optimized Reddit data for sentiment analysis
-
+        Fetch optimized Reddit data with high-engagement posts and top comments
+        
         Args:
             query: Search query
-            num_posts: Number of high-engagement posts to fetch
-            comments_per_post: Target number of comments per post
-            batch_size: Number of posts to process in parallel
-            progress_callback: Optional callback function(current, total, stage)
-
+            num_posts: Number of posts to target (will filter to high-engagement)
+            max_comments: Maximum total comments to fetch
+            progress_callback: Optional callback(current, total, stage)
+            
         Returns:
-            Structured feedback data for analysis
+            Structured data ready for sentiment analysis
         """
-        # Stage 1: Fetch high-engagement posts
+        
+        # PHASE 1: Fetch high-engagement posts from multiple strategies
         if progress_callback:
-            progress_callback(0, 7, 'Fetching high-engagement posts')
-
-        posts_data = self.fetch_posts(
-            query=query,
-            limit=num_posts,
-            sort='top',
-            time_filter='all'
-        )
-
-        posts = posts_data['posts']
-
-        if not posts:
-            raise Exception('No posts found for this query')
-
-        if progress_callback:
-            progress_callback(1, 7, f'Found {len(posts)} posts')
-
-        # Stage 2: Fetch comments for posts
-        posts_with_comments = []
-        total_comments = 0
-
-        for i, post in enumerate(posts):
+            progress_callback(0, 3, 'Fetching high-engagement posts')
+        
+        all_posts_map = {}
+        strategies = [
+            {'sort': 'top', 't': 'month'},
+            {'sort': 'top', 't': 'year'},
+            {'sort': 'relevance', 't': 'all'}
+        ]
+        
+        for idx, strategy in enumerate(strategies):
             try:
                 if progress_callback:
-                    progress_callback(
-                        2 + (i / len(posts)) * 4,
-                        7,
-                        f'Fetching comments: {i+1}/{len(posts)} posts'
-                    )
-
+                    progress_callback(idx, 3, f"Fetching posts: {strategy['sort']}/{strategy['t']}")
+                
+                result = self.fetch_posts(
+                    query=query,
+                    limit=100,
+                    sort=strategy['sort'],
+                    time_filter=strategy['t']
+                )
+                
+                for post in result['posts']:
+                    post_id = post['data']['id']
+                    if post_id not in all_posts_map:
+                        all_posts_map[post_id] = post
+                
+                time.sleep(0.8)
+                
+            except Exception as e:
+                print(f"Warning: Failed strategy {strategy}: {e}")
+                continue
+        
+        # Filter and sort by engagement
+        all_posts = list(all_posts_map.values())
+        high_engagement_posts = [
+            p for p in all_posts 
+            if p['data'].get('num_comments', 0) >= 10
+        ]
+        high_engagement_posts.sort(
+            key=lambda p: p['data'].get('num_comments', 0), 
+            reverse=True
+        )
+        selected_posts = high_engagement_posts[:num_posts]
+        
+        if not selected_posts:
+            raise Exception('No high-engagement posts found for this query')
+        
+        print(f"✓ PHASE 1: Selected {len(selected_posts)} high-engagement posts")
+        
+        # PHASE 2: Fetch and flatten comments
+        if progress_callback:
+            progress_callback(1, len(selected_posts) + 2, 'Fetching comments')
+        
+        posts_with_comments = []
+        total_comments = 0
+        comments_per_post = max_comments // len(selected_posts)
+        
+        for idx, post in enumerate(selected_posts):
+            if total_comments >= max_comments:
+                break
+            
+            if progress_callback:
+                progress_callback(
+                    idx + 2,
+                    len(selected_posts) + 2,
+                    f'Fetching comments: {idx + 1}/{len(selected_posts)}'
+                )
+            
+            try:
                 permalink = post['data']['permalink']
-                comments_data = self.fetch_comments(
+                comments_result = self.fetch_comments(
                     permalink=permalink,
                     limit=100,
                     sort='top'
                 )
-
-                # Filter comments (only actual text comments, minimum length)
-                comments = [
-                    item['data'] for item in comments_data['comments']
-                    if item['kind'] == 't1' and 
-                       item.get('data', {}).get('body') and 
-                       len(item['data']['body']) > 10
-                ][:comments_per_post]
-
-                posts_with_comments.append({
-                    'post': post,
-                    'comments': comments
-                })
-
-                total_comments += len(comments)
-
+                
+                # Flatten all comments
+                all_flat_comments = []
+                for comment in comments_result['comments']:
+                    flattened = self.flatten_comment(comment)
+                    all_flat_comments.extend(flattened)
+                
+                # Sort by score and take top comments
+                all_flat_comments.sort(key=lambda c: c['score'], reverse=True)
+                top_comments = all_flat_comments[:min(comments_per_post, max_comments - total_comments)]
+                
+                if top_comments:
+                    posts_with_comments.append({
+                        'post': post,
+                        'comments': top_comments
+                    })
+                    total_comments += len(top_comments)
+                    print(f"  ✓ Post {idx + 1}: {len(top_comments)} comments | Total: {total_comments}")
+                
                 # Rate limiting
-                if (i + 1) % batch_size == 0 and i + 1 < len(posts):
-                    time.sleep(0.5)
-
+                if (idx + 1) % 5 == 0:
+                    time.sleep(1.0)
+                else:
+                    time.sleep(0.7)
+                    
             except Exception as e:
                 print(f"Warning: Failed to fetch comments for post {post['data']['id']}: {e}")
-                posts_with_comments.append({
-                    'post': post,
-                    'comments': []
-                })
-
-        # Stage 3: Structure data for analysis
+                continue
+        
+        print(f"✓ PHASE 2: {total_comments} total comments from {len(posts_with_comments)} posts")
+        
+        # PHASE 3: Structure data
         if progress_callback:
-            progress_callback(6, 7, 'Processing feedback data')
-
-        feedback_data = {
+            progress_callback(
+                len(selected_posts) + 2,
+                len(selected_posts) + 2,
+                'Processing complete'
+            )
+        
+        processed_data = {
             'metadata': {
                 'query': query,
                 'fetchedAt': datetime.utcnow().isoformat(),
                 'totalPosts': len(posts_with_comments),
                 'totalComments': total_comments,
+                'averageCommentsPerPost': round(total_comments / len(posts_with_comments)) if posts_with_comments else 0,
                 'source': 'Reddit API',
-                'optimized': True,
-                'purpose': 'Sentiment and Emotion Analysis'
+                'fetchStrategy': 'High-engagement posts with top comments',
+                'note': 'Focused on posts with active discussions and quality comments'
             },
-            'posts': []
+            'postsWithComments': []
         }
-
+        
         for item in posts_with_comments:
             post_data = item['post']['data']
-
-            feedback_data['posts'].append({
-                # Post metadata
-                'id': post_data['id'],
-                'title': post_data['title'],
-                'author': post_data['author'],
-                'subreddit': post_data['subreddit'],
-                'content': post_data.get('selftext', ''),
-                'upvotes': post_data['ups'],
-                'commentCount': post_data['num_comments'],
-                'url': f"https://reddit.com{post_data['permalink']}",
-                'createdAt': datetime.fromtimestamp(post_data['created_utc']).isoformat(),
-
-                # Comments
-                'comments': [
-                    {
-                        'id': comment['id'],
-                        'author': comment['author'],
-                        'text': comment['body'],
-                        'score': comment['score'],
-                        'createdAt': datetime.fromtimestamp(comment['created_utc']).isoformat(),
-                        'depth': comment.get('depth', 0)
-                    }
-                    for comment in item['comments']
-                ]
+            comments = item['comments']
+            
+            # Calculate comment statistics
+            comment_scores = [c['score'] for c in comments]
+            
+            processed_data['postsWithComments'].append({
+                'post': {
+                    'id': post_data['id'],
+                    'title': post_data['title'],
+                    'author': post_data['author'],
+                    'subreddit': post_data['subreddit'],
+                    'content': post_data.get('selftext', ''),
+                    'upvotes': post_data['ups'],
+                    'score': post_data['score'],
+                    'commentCount': post_data['num_comments'],
+                    'url': f"https://reddit.com{post_data['permalink']}",
+                    'createdAt': datetime.fromtimestamp(post_data['created_utc']).isoformat(),
+                    'mediaUrl': post_data.get('url'),
+                    'thumbnail': post_data.get('thumbnail'),
+                    'isVideo': post_data.get('is_video', False)
+                },
+                'comments': comments,
+                'commentsSummary': {
+                    'total': len(comments),
+                    'topLevelComments': len([c for c in comments if c['depth'] == 0]),
+                    'nestedComments': len([c for c in comments if c['depth'] > 0]),
+                    'averageScore': round(sum(comment_scores) / len(comment_scores)) if comment_scores else 0,
+                    'maxDepth': max([c['depth'] for c in comments]) if comments else 0,
+                    'minScore': min(comment_scores) if comment_scores else 0,
+                    'maxScore': max(comment_scores) if comment_scores else 0
+                }
             })
-
-        if progress_callback:
-            progress_callback(7, 7, 'Complete')
-
-        return feedback_data
+        
+        return processed_data
 
 
 # Example usage function
@@ -344,15 +433,15 @@ def main():
     def progress_callback(current, total, stage):
         print(f"Progress: {current}/{total} - {stage}")
 
-    # Fetch optimized data
-    query = "python programming"
+    # Fetch optimized data using v2
+    query = "iPhone 16"
     print(f"Fetching Reddit data for query: {query}")
 
     try:
-        data = fetcher.fetch_optimized_data(
+        data = fetcher.fetch_optimized_data_v2(
             query=query,
             num_posts=35,
-            comments_per_post=143,
+            max_comments=5000,
             progress_callback=progress_callback
         )
 
@@ -361,7 +450,7 @@ def main():
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
-        print(f"\n✅ Successfully saved {len(data['posts'])} posts with {data['metadata']['totalComments']} comments to {filename}")
+        print(f"\n✅ Successfully saved {len(data['postsWithComments'])} posts with {data['metadata']['totalComments']} comments to {filename}")
 
     except Exception as e:
         print(f"❌ Error: {e}")
