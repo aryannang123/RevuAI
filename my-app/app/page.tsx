@@ -400,15 +400,15 @@ const handleSearch = useCallback(async () => {
     // Call Python backend
     const BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:5000';
     
-    const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-optimized`, {
+    const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         query: searchQuery.trim(),
-        num_posts: 35,
-        max_comments: 5000
+        target_comments: 10000,
+        min_score: 5
       })
     });
 

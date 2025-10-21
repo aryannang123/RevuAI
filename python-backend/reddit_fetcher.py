@@ -1,5 +1,5 @@
-# reddit_fetcher.py
-# Python backend for Reddit API data fetching
+# optimized_reddit_fetcher.py
+# High-performance Reddit data fetcher for 10K+ comments
 
 import requests
 import time
@@ -7,98 +7,102 @@ import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import base64
-
-class RedditAPIFetcher:
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import random
+class MultiAccountRedditFetcher:
     """
-    Handles Reddit API authentication and data fetching
+    High-performance Reddit fetcher using multiple accounts
+    Optimized for 10K+ comments with minimal data
     """
 
-    def __init__(self):
-        # Load credentials from environment variables
-        self.client_id = os.getenv('REDDIT_CLIENT_ID')
-        self.client_secret = os.getenv('REDDIT_CLIENT_SECRET')
-        self.username = os.getenv('REDDIT_USERNAME')
-        self.password = os.getenv('REDDIT_PASSWORD')
-
-        # Token caching
-        self.access_token: Optional[str] = None
-        self.token_expires_at: float = 0
-
-        # User agent
-        self.user_agent = 'RevuAI/0.1 by RevuAI Team'
-
-        # Validate credentials
-        if not all([self.client_id, self.client_secret, self.username, self.password]):
-            raise ValueError("Missing Reddit API credentials in environment variables")
-
-    def get_access_token(self) -> str:
+    def __init__(self, accounts: List[Dict[str, str]] = None):
         """
-        Get Reddit OAuth access token (with caching)
+        Initialize with multiple Reddit accounts
+        
+        Args:
+            accounts: List of dicts with keys: client_id, client_secret, username, password
+                     If None, loads from environment variables
         """
-        # Check if cached token is still valid
-        if self.access_token and time.time() < self.token_expires_at:
-            print("Using cached Reddit access token")
-            return self.access_token
+        if accounts:
+            self.accounts = accounts
+        else:
+            # Load single account from env (backward compatible)
+            self.accounts = [{
+                'client_id': os.getenv('REDDIT_CLIENT_ID'),
+                'client_secret': os.getenv('REDDIT_CLIENT_SECRET'),
+                'username': os.getenv('REDDIT_USERNAME'),
+                'password': os.getenv('REDDIT_PASSWORD')
+            }]
+        
+        # Token cache for each account
+        self.tokens = {}
+        self.token_locks = {i: threading.Lock() for i in range(len(self.accounts))}
+        
+        self.user_agent = 'RevuAI/2.0 by RevuAI Team'
+        
+        # Validate accounts
+        for idx, acc in enumerate(self.accounts):
+            if not all([acc['client_id'], acc['client_secret'], acc['username'], acc['password']]):
+                raise ValueError(f"Account {idx} missing credentials")
 
-        # Fetch new token
-        print("Fetching new Reddit access token")
+    def get_access_token(self, account_idx: int = 0) -> str:
+        """Get OAuth token for specific account with thread safety"""
+        with self.token_locks[account_idx]:
+            cache_key = f"token_{account_idx}"
+            cache = self.tokens.get(cache_key, {})
+            
+            # Check cached token
+            if cache.get('token') and time.time() < cache.get('expires_at', 0):
+                return cache['token']
+            
+            # Fetch new token
+            acc = self.accounts[account_idx]
+            auth_string = f"{acc['client_id']}:{acc['client_secret']}"
+            encoded_auth = base64.b64encode(auth_string.encode()).decode()
+            
+            headers = {
+                'Authorization': f'Basic {encoded_auth}',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': self.user_agent
+            }
+            
+            data = {
+                'grant_type': 'password',
+                'username': acc['username'],
+                'password': acc['password']
+            }
+            
+            response = requests.post(
+                'https://www.reddit.com/api/v1/access_token',
+                headers=headers,
+                data=data
+            )
+            
+            if not response.ok:
+                raise Exception(f"Auth failed for account {account_idx}: {response.text}")
+            
+            token_data = response.json()
+            
+            # Cache token
+            self.tokens[cache_key] = {
+                'token': token_data['access_token'],
+                'expires_at': time.time() + (token_data['expires_in'] - 300)
+            }
+            
+            return token_data['access_token']
 
-        auth_string = f"{self.client_id}:{self.client_secret}"
-        encoded_auth = base64.b64encode(auth_string.encode()).decode()
-
-        headers = {
-            'Authorization': f'Basic {encoded_auth}',
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': self.user_agent
-        }
-
-        data = {
-            'grant_type': 'password',
-            'username': self.username,
-            'password': self.password
-        }
-
-        response = requests.post(
-            'https://www.reddit.com/api/v1/access_token',
-            headers=headers,
-            data=data
-        )
-
-        if not response.ok:
-            raise Exception(f"Failed to authenticate with Reddit: {response.text}")
-
-        token_data = response.json()
-
-        # Cache token with 5-minute buffer before expiry
-        self.access_token = token_data['access_token']
-        self.token_expires_at = time.time() + (token_data['expires_in'] - 300)
-
-        return self.access_token
-
-    def fetch_posts(
+    def fetch_posts_batch(
         self,
         query: str,
-        limit: int = 35,
+        limit: int = 100,
         sort: str = 'top',
-        time_filter: str = 'all',
-        after: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Fetch Reddit posts based on search query
-
-        Args:
-            query: Search query string
-            limit: Number of posts to fetch (max 100)
-            sort: Sort type ('relevance', 'hot', 'top', 'new', 'comments')
-            time_filter: Time filter ('hour', 'day', 'week', 'month', 'year', 'all')
-            after: Pagination token
-
-        Returns:
-            Dictionary containing posts and pagination info
-        """
-        token = self.get_access_token()
-
-        # Build URL
+        time_filter: str = 'month',
+        account_idx: int = 0
+    ) -> List[Dict]:
+        """Fetch posts using specific account"""
+        token = self.get_access_token(account_idx)
+        
         url = (
             f"https://oauth.reddit.com/search.json"
             f"?q={requests.utils.quote(query.strip())}"
@@ -107,353 +111,344 @@ class RedditAPIFetcher:
             f"&t={time_filter}"
             f"&raw_json=1"
         )
-
-        if after:
-            url += f"&after={after}"
-
+        
         headers = {
             'Authorization': f'Bearer {token}',
             'User-Agent': self.user_agent
         }
-
-        print(f"Fetching posts: sort={sort}, t={time_filter}, after={after or 'none'}")
-
+        
         response = requests.get(url, headers=headers)
-
+        
         if not response.ok:
-            raise Exception(f"Reddit API error: {response.status_code} - {response.text}")
-
+            raise Exception(f"Post fetch failed: {response.status_code}")
+        
         data = response.json()
-
         posts = data['data']['children']
-        print(f"✓ Returned {len(posts)} posts, next after: {data['data'].get('after', 'none')}")
+        
+        # Filter out media-heavy posts (images/videos)
+        text_posts = []
+        for post in posts:
+            p = post['data']
+            # Skip if it's primarily media
+            if p.get('is_video') or p.get('post_hint') in ['image', 'hosted:video', 'rich:video']:
+                continue
+            # Skip if no text content
+            if not p.get('selftext', '').strip() and len(p.get('title', '')) < 20:
+                continue
+            text_posts.append(post)
+        
+        return text_posts
 
-        return {
-            'posts': posts,
-            'after': data['data'].get('after'),
-            'before': data['data'].get('before'),
-            'dist': data['data'].get('dist'),
-            'count': len(posts)
-        }
-
-    def fetch_comments(
+    def fetch_comments_lightweight(
         self,
         permalink: str,
-        limit: int = 100,
-        sort: str = 'top'
-    ) -> Dict[str, Any]:
+        limit: int = 50,
+        min_score: int = 5,
+        account_idx: int = 0
+    ) -> List[Dict]:
         """
-        Fetch comments for a specific Reddit post
-
-        Args:
-            permalink: Post permalink (e.g., '/r/python/comments/xyz/title/')
-            limit: Number of comments to fetch
-            sort: Sort order ('confidence', 'top', 'new', 'controversial', 'old', 'qa')
-
-        Returns:
-            Dictionary containing comments
+        Fetch only essential comment data
+        
+        Returns: List of {id, text, score, post_title}
         """
-        token = self.get_access_token()
-
-        # Clean permalink
+        token = self.get_access_token(account_idx)
+        
         clean_permalink = permalink[1:] if permalink.startswith('/') else permalink
-
+        
         url = (
             f"https://oauth.reddit.com/{clean_permalink}.json"
             f"?limit={limit}"
-            f"&sort={sort}"
+            f"&sort=top"
             f"&raw_json=1"
         )
-
+        
         headers = {
             'Authorization': f'Bearer {token}',
             'User-Agent': self.user_agent
         }
-
-        print(f"Fetching comments from: {clean_permalink}")
-
-        response = requests.get(url, headers=headers)
-
-        if not response.ok:
-            raise Exception(f"Failed to fetch comments: {response.status_code} - {response.text}")
-
-        data = response.json()
-
-        # Reddit returns [post_data, comments_data]
-        comments_data = data[1] if len(data) > 1 else {'data': {'children': []}}
-        comments = comments_data['data']['children']
-
-        return {
-            'comments': comments,
-            'count': len(comments)
-        }
-
-    def flatten_comment(self, comment_data: Dict, depth: int = 0) -> List[Dict]:
-        """
-        Recursively flatten nested Reddit comments
         
-        Args:
-            comment_data: Comment data from Reddit API
-            depth: Current nesting depth
-            
-        Returns:
-            List of flattened comment dictionaries
-        """
-        if not comment_data or comment_data.get('kind') != 't1':
+        response = requests.get(url, headers=headers)
+        
+        if not response.ok:
             return []
         
-        data = comment_data.get('data', {})
+        data = response.json()
         
-        # Base comment
-        flat_comment = {
-            'id': data.get('id'),
-            'author': data.get('author'),
-            'body': data.get('body', ''),
-            'score': data.get('score', 0),
-            'createdAt': datetime.fromtimestamp(data.get('created_utc', 0)).isoformat(),
-            'depth': depth,
-            'isSubmitter': data.get('is_submitter', False),
-            'distinguished': data.get('distinguished')
-        }
+        # Extract post title
+        post_title = data[0]['data']['children'][0]['data'].get('title', '')
         
-        result = [flat_comment]
+        # Flatten comments
+        comments_data = data[1]['data']['children'] if len(data) > 1 else []
         
-        # Recursively process replies
-        replies = data.get('replies', {})
-        if isinstance(replies, dict) and 'data' in replies:
-            children = replies['data'].get('children', [])
-            for reply in children:
-                result.extend(self.flatten_comment(reply, depth + 1))
+        lightweight_comments = []
         
-        return result
+        def extract_comments(comment_list, depth=0):
+            for comment in comment_list:
+                if comment.get('kind') != 't1':
+                    continue
+                
+                c = comment['data']
+                score = c.get('score', 0)
+                body = c.get('body', '').strip()
+                
+                # Filter low-quality comments
+                if score < min_score or len(body) < 10 or body in ['[deleted]', '[removed]']:
+                    continue
+                
+                lightweight_comments.append({
+                    'id': c['id'],
+                    'text': body,
+                    'score': score,
+                    'post_title': post_title
+                })
+                
+                # Process replies (but limit depth to avoid spam)
+                if depth < 3:
+                    replies = c.get('replies', {})
+                    if isinstance(replies, dict) and 'data' in replies:
+                        extract_comments(replies['data'].get('children', []), depth + 1)
+        
+        extract_comments(comments_data)
+        
+        return lightweight_comments
 
-    def fetch_optimized_data_v2(
+    def fetch_mass_comments(
         self,
         query: str,
-        num_posts: int = 35,
-        max_comments: int = 5000,
+        target_comments: int = 10000,
+        min_score: int = 5,
         progress_callback=None
     ) -> Dict[str, Any]:
         """
-        Fetch optimized Reddit data with high-engagement posts and top comments
+        Fetch 10K+ comments efficiently using multi-account parallel fetching
         
         Args:
             query: Search query
-            num_posts: Number of posts to target (will filter to high-engagement)
-            max_comments: Maximum total comments to fetch
+            target_comments: Target number of comments (default 10000)
+            min_score: Minimum comment score filter (default 5)
             progress_callback: Optional callback(current, total, stage)
-            
+        
         Returns:
-            Structured data ready for sentiment analysis
+            {
+                'comments': [{'id', 'text', 'score', 'post_title'}, ...],
+                'metadata': {...}
+            }
         """
         
-        # PHASE 1: Fetch high-engagement posts from multiple strategies
-        if progress_callback:
-            progress_callback(0, 3, 'Fetching high-engagement posts')
+        print(f"\n{'='*60}")
+        print(f"🚀 MASS FETCH MODE: Targeting {target_comments} comments")
+        print(f"   Accounts: {len(self.accounts)}")
+        print(f"   Min Score: {min_score}")
+        print(f"{'='*60}\n")
         
-        all_posts_map = {}
+        start_time = time.time()
+        all_comments = {}  # Use dict for deduplication by ID
+        
+        # PHASE 1: Fetch posts from multiple strategies
+        if progress_callback:
+            progress_callback(0, 100, 'Fetching posts')
+        
         strategies = [
             {'sort': 'top', 't': 'month'},
             {'sort': 'top', 't': 'year'},
-            {'sort': 'relevance', 't': 'all'}
+            {'sort': 'relevance', 't': 'all'},
+            {'sort': 'comments', 't': 'month'}
         ]
         
-        for idx, strategy in enumerate(strategies):
-            try:
-                if progress_callback:
-                    progress_callback(idx, 3, f"Fetching posts: {strategy['sort']}/{strategy['t']}")
-                
-                result = self.fetch_posts(
+        all_posts = []
+        
+        with ThreadPoolExecutor(max_workers=len(self.accounts)) as executor:
+            futures = []
+            
+            for idx, strategy in enumerate(strategies):
+                account_idx = idx % len(self.accounts)
+                future = executor.submit(
+                    self.fetch_posts_batch,
                     query=query,
                     limit=100,
                     sort=strategy['sort'],
-                    time_filter=strategy['t']
+                    time_filter=strategy['t'],
+                    account_idx=account_idx
                 )
-                
-                for post in result['posts']:
-                    post_id = post['data']['id']
-                    if post_id not in all_posts_map:
-                        all_posts_map[post_id] = post
-                
-                time.sleep(0.8)
-                
-            except Exception as e:
-                print(f"Warning: Failed strategy {strategy}: {e}")
-                continue
+                futures.append(future)
+            
+            for future in as_completed(futures):
+                try:
+                    posts = future.result()
+                    all_posts.extend(posts)
+                except Exception as e:
+                    print(f"Warning: Post fetch failed: {e}")
         
-        # Filter and sort by engagement
-        all_posts = list(all_posts_map.values())
-        high_engagement_posts = [
-            p for p in all_posts 
-            if p['data'].get('num_comments', 0) >= 10
-        ]
-        high_engagement_posts.sort(
-            key=lambda p: p['data'].get('num_comments', 0), 
-            reverse=True
-        )
-        selected_posts = high_engagement_posts[:num_posts]
+        # Deduplicate posts
+        unique_posts = {p['data']['id']: p for p in all_posts}
+        all_posts = list(unique_posts.values())
         
-        if not selected_posts:
-            raise Exception('No high-engagement posts found for this query')
+        # Sort by comment count
+        all_posts.sort(key=lambda p: p['data'].get('num_comments', 0), reverse=True)
         
-        print(f"✓ PHASE 1: Selected {len(selected_posts)} high-engagement posts")
+        print(f"✓ PHASE 1: Found {len(all_posts)} unique text posts")
         
-        # PHASE 2: Fetch and flatten comments
+        # PHASE 2: Fetch comments in parallel
         if progress_callback:
-            progress_callback(1, len(selected_posts) + 2, 'Fetching comments')
+            progress_callback(20, 100, 'Fetching comments')
         
-        posts_with_comments = []
-        total_comments = 0
-        comments_per_post = max_comments // len(selected_posts)
+        comments_per_post = 30  # Fetch top 30 from each post
+        estimated_posts_needed = (target_comments // comments_per_post) + 50
+        posts_to_process = all_posts[:min(estimated_posts_needed, len(all_posts))]
         
-        for idx, post in enumerate(selected_posts):
-            if total_comments >= max_comments:
-                break
+        print(f"✓ PHASE 2: Processing {len(posts_to_process)} posts for comments")
+        
+        with ThreadPoolExecutor(max_workers=len(self.accounts) * 2) as executor:
+            futures = []
             
-            if progress_callback:
-                progress_callback(
-                    idx + 2,
-                    len(selected_posts) + 2,
-                    f'Fetching comments: {idx + 1}/{len(selected_posts)}'
-                )
-            
-            try:
+            for idx, post in enumerate(posts_to_process):
+                if len(all_comments) >= target_comments:
+                    break
+                
+                account_idx = idx % len(self.accounts)
                 permalink = post['data']['permalink']
-                comments_result = self.fetch_comments(
+                
+                future = executor.submit(
+                    self.fetch_comments_lightweight,
                     permalink=permalink,
                     limit=100,
-                    sort='top'
+                    min_score=min_score,
+                    account_idx=account_idx
                 )
-                
-                # Flatten all comments
-                all_flat_comments = []
-                for comment in comments_result['comments']:
-                    flattened = self.flatten_comment(comment)
-                    all_flat_comments.extend(flattened)
-                
-                # Sort by score and take top comments
-                all_flat_comments.sort(key=lambda c: c['score'], reverse=True)
-                top_comments = all_flat_comments[:min(comments_per_post, max_comments - total_comments)]
-                
-                if top_comments:
-                    posts_with_comments.append({
-                        'post': post,
-                        'comments': top_comments
-                    })
-                    total_comments += len(top_comments)
-                    print(f"  ✓ Post {idx + 1}: {len(top_comments)} comments | Total: {total_comments}")
-                
-                # Rate limiting
-                if (idx + 1) % 5 == 0:
-                    time.sleep(1.0)
-                else:
-                    time.sleep(0.7)
+                futures.append((future, idx))
+            
+            completed = 0
+            for future, idx in futures:
+                try:
+                    comments = future.result()
                     
-            except Exception as e:
-                print(f"Warning: Failed to fetch comments for post {post['data']['id']}: {e}")
-                continue
+                    # Add to collection (deduplication by ID)
+                    for comment in comments:
+                        if comment['id'] not in all_comments:
+                            all_comments[comment['id']] = comment
+                    
+                    completed += 1
+                    
+                    if completed % 10 == 0:
+                        current_count = len(all_comments)
+                        progress_pct = min(20 + int((current_count / target_comments) * 70), 90)
+                        if progress_callback:
+                            progress_callback(progress_pct, 100, f'Comments: {current_count}/{target_comments}')
+                        print(f"  Progress: {current_count} comments from {completed} posts")
+                    
+                    # Add random delay (more human-like)
+                    time.sleep(random.uniform(0.5, 1.2))
+                    
+                    # Longer break every 25 posts
+                    if completed % 25 == 0 and completed > 0:
+                        pause = random.uniform(3, 6)
+                        print(f"  Taking a {pause:.1f}s break...")
+                        time.sleep(pause)
+                    
+                    # Stop if target reached
+                    if len(all_comments) >= target_comments:
+                        break
+                        
+                except Exception as e:
+                    error_msg = str(e)
+                    
+                    # Handle rate limiting
+                    if '429' in error_msg:
+                        print(f"⚠️  Rate limit hit! Pausing for 60s...")
+                        time.sleep(60)
+                    
+                    print(f"Warning: Comment fetch failed for post {idx}: {e}")
         
-        print(f"✓ PHASE 2: {total_comments} total comments from {len(posts_with_comments)} posts")
+        # Convert to list and sort by score
+        final_comments = list(all_comments.values())
+        final_comments.sort(key=lambda c: c['score'], reverse=True)
         
-        # PHASE 3: Structure data
+        # Take top N comments
+        final_comments = final_comments[:target_comments]
+        
+        elapsed = time.time() - start_time
+        
         if progress_callback:
-            progress_callback(
-                len(selected_posts) + 2,
-                len(selected_posts) + 2,
-                'Processing complete'
-            )
+            progress_callback(100, 100, 'Complete')
         
-        processed_data = {
+        print(f"\n{'='*60}")
+        print(f"✅ FETCH COMPLETE")
+        print(f"   Comments: {len(final_comments)}")
+        print(f"   Time: {elapsed:.1f}s")
+        print(f"   Rate: {len(final_comments)/elapsed:.1f} comments/sec")
+        print(f"{'='*60}\n")
+        
+        # Calculate statistics
+        scores = [c['score'] for c in final_comments]
+        
+        return {
+            'comments': final_comments,
             'metadata': {
                 'query': query,
+                'totalComments': len(final_comments),
+                'targetComments': target_comments,
+                'minScore': min_score,
+                'averageScore': round(sum(scores) / len(scores)) if scores else 0,
+                'minScoreValue': min(scores) if scores else 0,
+                'maxScoreValue': max(scores) if scores else 0,
+                'fetchTime': round(elapsed, 2),
+                'commentsPerSecond': round(len(final_comments) / elapsed, 2),
+                'accountsUsed': len(self.accounts),
                 'fetchedAt': datetime.utcnow().isoformat(),
-                'totalPosts': len(posts_with_comments),
-                'totalComments': total_comments,
-                'averageCommentsPerPost': round(total_comments / len(posts_with_comments)) if posts_with_comments else 0,
-                'source': 'Reddit API',
-                'fetchStrategy': 'High-engagement posts with top comments',
-                'note': 'Focused on posts with active discussions and quality comments'
-            },
-            'postsWithComments': []
+                'source': 'Reddit API (Multi-Account Optimized)'
+            }
         }
-        
-        for item in posts_with_comments:
-            post_data = item['post']['data']
-            comments = item['comments']
-            
-            # Calculate comment statistics
-            comment_scores = [c['score'] for c in comments]
-            
-            processed_data['postsWithComments'].append({
-                'post': {
-                    'id': post_data['id'],
-                    'title': post_data['title'],
-                    'author': post_data['author'],
-                    'subreddit': post_data['subreddit'],
-                    'content': post_data.get('selftext', ''),
-                    'upvotes': post_data['ups'],
-                    'score': post_data['score'],
-                    'commentCount': post_data['num_comments'],
-                    'url': f"https://reddit.com{post_data['permalink']}",
-                    'createdAt': datetime.fromtimestamp(post_data['created_utc']).isoformat(),
-                    'mediaUrl': post_data.get('url'),
-                    'thumbnail': post_data.get('thumbnail'),
-                    'isVideo': post_data.get('is_video', False)
-                },
-                'comments': comments,
-                'commentsSummary': {
-                    'total': len(comments),
-                    'topLevelComments': len([c for c in comments if c['depth'] == 0]),
-                    'nestedComments': len([c for c in comments if c['depth'] > 0]),
-                    'averageScore': round(sum(comment_scores) / len(comment_scores)) if comment_scores else 0,
-                    'maxDepth': max([c['depth'] for c in comments]) if comments else 0,
-                    'minScore': min(comment_scores) if comment_scores else 0,
-                    'maxScore': max(comment_scores) if comment_scores else 0
-                }
-            })
-        
-        return processed_data
 
 
-# Example usage function
+# Example usage
 def main():
-    """
-    Example usage of RedditAPIFetcher
-    """
     import json
     from dotenv import load_dotenv
-
-    # Load environment variables
+    
     load_dotenv()
+    
+    #Option 2: Multiple accounts (faster)
+    fetcher = MultiAccountRedditFetcher(accounts=[
+        {
+            'client_id': 'xxx1',
+            'client_secret': 'yyy1',
+            'username': 'user1',
+            'password': 'pass1'
+        },
+        {
+            'client_id': 'xxx2',
+            'client_secret': 'yyy2',
+            'username': 'user2',
+            'password': 'pass2'
+        },
+                {
+            'client_id': 'xxx3',
+            'client_secret': 'yyy3',
+            'username': 'user3',
+            'password': 'pass3'
+        }
 
-    # Initialize fetcher
-    fetcher = RedditAPIFetcher()
-
-    # Define progress callback
+    ])
+    
     def progress_callback(current, total, stage):
-        print(f"Progress: {current}/{total} - {stage}")
-
-    # Fetch optimized data using v2
+        print(f"[{current}/{total}] {stage}")
+    
     query = "iPhone 16"
-    print(f"Fetching Reddit data for query: {query}")
-
-    try:
-        data = fetcher.fetch_optimized_data_v2(
-            query=query,
-            num_posts=35,
-            max_comments=5000,
-            progress_callback=progress_callback
-        )
-
-        # Save to file
-        filename = f"reddit_feedback_{query.replace(' ', '_')}_{int(time.time())}.json"
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-
-        print(f"\n✅ Successfully saved {len(data['postsWithComments'])} posts with {data['metadata']['totalComments']} comments to {filename}")
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
+    
+    result = fetcher.fetch_mass_comments(
+        query=query,
+        target_comments=10000,
+        min_score=5,
+        progress_callback=progress_callback
+    )
+    
+    # Save lightweight data
+    filename = f"reddit_comments_{query.replace(' ', '_')}_{int(time.time())}.json"
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+    
+    print(f"\n✅ Saved {len(result['comments'])} comments to {filename}")
+    print(f"   File size: ~{os.path.getsize(filename) / 1024:.1f} KB")
 
 
 if __name__ == "__main__":
