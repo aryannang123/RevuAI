@@ -380,25 +380,29 @@ class MultiAccountRedditFetcher:
         
         # Calculate statistics
         scores = [c['score'] for c in final_comments]
+
+        # Count unique posts
+        unique_post_titles = set(c['post_title'] for c in final_comments)
+        total_posts = len(unique_post_titles)
         
         return {
-            'comments': final_comments,
-            'metadata': {
-                'query': query,
-                'totalComments': len(final_comments),
-                'targetComments': target_comments,
-                'minScore': min_score,
-                'averageScore': round(sum(scores) / len(scores)) if scores else 0,
-                'minScoreValue': min(scores) if scores else 0,
-                'maxScoreValue': max(scores) if scores else 0,
-                'fetchTime': round(elapsed, 2),
-                'commentsPerSecond': round(len(final_comments) / elapsed, 2),
-                'accountsUsed': len(self.accounts),
-                'fetchedAt': datetime.utcnow().isoformat(),
-                'source': 'Reddit API (Multi-Account Optimized)'
+                'comments': final_comments,
+                'metadata': {
+                    'query': query,
+                    'totalComments': len(final_comments),
+                    'totalPosts': total_posts,  # ADD THIS LINE
+                    'targetComments': target_comments,
+                    'minScore': min_score,
+                    'averageScore': round(sum(scores) / len(scores)) if scores else 0,
+                    'minScoreValue': min(scores) if scores else 0,
+                    'maxScoreValue': max(scores) if scores else 0,
+                    'fetchTime': round(elapsed, 2),
+                    'commentsPerSecond': round(len(final_comments) / elapsed, 2),
+                    'accountsUsed': len(self.accounts),
+                    'fetchedAt': datetime.utcnow().isoformat(),
+                    'source': 'Reddit API (Multi-Account Optimized)'
             }
         }
-
 
 # Example usage
 def main():
