@@ -8,12 +8,12 @@ import { SplitText as GSAPSplitText } from 'gsap/SplitText';
 import { useGSAP } from '@gsap/react';
 import { createClient } from '@supabase/supabase-js';
 import { Renderer, Program, Mesh, Triangle } from 'ogl';
+import { MultiStepLoader } from "@/components/ui/multi-step-loader";
 
 // --- AUTH LOGIC ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const PYTHON_BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:5000';
-
 
 let supabase: any;
 if (supabaseUrl && supabaseAnonKey) {
@@ -230,49 +230,17 @@ const MemoizedLiquidChrome = React.memo(LiquidChrome);
 const MemoizedGooeyNav = React.memo(GooeyNav);
 const MemoizedSplitText = React.memo(SplitText);
 
-// Status Messages Component
-const StatusMessages = React.memo(({ isLoading, progress, error, success }: any) => (
-  <div className="mt-6 text-center pointer-events-auto w-[500px] max-w-[90%] status-container">
-    {isLoading && (
-      <div className="bg-white/5 rounded-lg p-4 border border-cyan-400/30 shadow-[0_0_20px_rgba(0,255,255,0.2)] loading-transition">
-        <div className="flex items-center justify-center gap-3 mb-2">
-          <div className="animate-spin rounded-full h-5 w-5 border-2 border-cyan-400 border-t-transparent"></div>
-          <span className="text-white/90 text-sm font-medium">
-            {progress.total <= 3 ? 'Fetching posts...' : `Fetching comments... (${progress.current}/${progress.total})`}
-          </span>
-        </div>
-        <p className="text-white/60 text-xs">
-          This may take 30-60 seconds
-        </p>
-      </div>
-    )}
-
-    {error && (
-      <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 shadow-[0_0_15px_rgba(255,0,0,0.2)] loading-transition">
-        <div className="flex items-center gap-2 justify-center">
-          <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p className="text-red-200 text-sm font-medium">{error}</p>
-        </div>
-      </div>
-    )}
-
-    {success && (
-      <div className="bg-green-500/20 border border-green-500/50 rounded-lg p-4 shadow-[0_0_15px_rgba(0,255,0,0.2)] loading-transition">
-        <div className="flex items-center gap-2 justify-center mb-2">
-          <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p className="text-green-200 text-sm font-medium">{success}</p>
-        </div>
-        <p className="text-green-300/80 text-xs">Check python-backend/pre-process/ folder 📁</p>
-      </div>
-    )}
-  </div>
-));
-
-StatusMessages.displayName = 'StatusMessages';
+// Loading states for multi-step loader
+const loadingStates = [
+  { text: "Authenticating with Reddit API" },
+  { text: "Searching for relevant posts" },
+  { text: "Analyzing post engagement" },
+  { text: "Fetching high-quality comments" },
+  { text: "Processing comment threads" },
+  { text: "Filtering by score threshold" },
+  { text: "Deduplicating content" },
+  { text: "Finalizing dataset" },
+];
 
 // --- MAIN COMPONENT ---
 export default function Home() {
@@ -284,9 +252,8 @@ export default function Home() {
   // Reddit Fetcher States
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [currentLoadingState, setCurrentLoadingState] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   
   // Search History States
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
@@ -302,20 +269,19 @@ export default function Home() {
   const fetchSearchHistory = useCallback(async (userId: string) => {
     if (!userId) return;
     
-  setLoadingHistory(true);
-  try {
-    // Make request to fetch user's search history
-    const response = await fetch(`/api/searches?userId=${encodeURIComponent(userId)}`);
-    if (response.ok) {
-      const data = await response.json();
-      setSearchHistory(data.searches || []);
+    setLoadingHistory(true);
+    try {
+      const response = await fetch(`/api/searches?userId=${encodeURIComponent(userId)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSearchHistory(data.searches || []);
+      }
+    } catch (err) {
+      console.error('Error fetching search history:', err);
+    } finally {
+      setLoadingHistory(false);
     }
-  } catch (err) {
-    console.error('Error fetching search history:', err);
-  } finally {
-    setLoadingHistory(false);
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -330,27 +296,6 @@ export default function Home() {
     };
     checkAuth();
   }, [router, fetchSearchHistory]);
-
-  // Helper function to flatten nested comments
-  const flattenComments = useCallback((comment: any, depth = 0): any[] => {
-    if (!comment || comment.kind !== 't1') return [];
-    
-    const flatComment = {
-      id: comment.data.id,
-      author: comment.data.author,
-      body: comment.data.body,
-      score: comment.data.score,
-      createdAt: new Date(comment.data.created_utc * 1000).toISOString(),
-      depth: depth,
-      isSubmitter: comment.data.is_submitter,
-      distinguished: comment.data.distinguished
-    };
-    
-    const replies = comment.data.replies?.data?.children || [];
-    const childComments = replies.flatMap((reply: any) => flattenComments(reply, depth + 1));
-    
-    return [flatComment, ...childComments];
-  }, []);
 
   // Save to file in pre-process directory
   const saveToFile = useCallback(async (data: any, queryName: string) => {
@@ -381,92 +326,95 @@ export default function Home() {
     }
   }, []);
 
-  // Replace your handleSearch function in page.tsx with this:
-
-const handleSearch = useCallback(async () => {
-  if (!searchQuery.trim()) {
-    setError("Please enter a search query");
-    return;
-  }
-
-  setIsLoading(true);
-  setError(null);
-  setSuccess(null);
-  setProgress({ current: 0, total: 100 });
-
-  try {
-    console.log(`🚀 Sending request to Python backend for: "${searchQuery}"`);
-    
-    // Call Python backend
-    const BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:5000';
-    
-    const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: searchQuery.trim(),
-        target_comments: 10000,
-        min_score: 5
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to fetch data from Python backend');
+  // Enhanced search handler with loading animation
+  const handleSearch = useCallback(async () => {
+    if (!searchQuery.trim()) {
+      setError("Please enter a search query");
+      return;
     }
 
-    setProgress({ current: 90, total: 100 });
-    console.log('✓ Received data from Python backend');
+    setIsLoading(true);
+    setError(null);
+    setCurrentLoadingState(0);
 
-    const processedData = await response.json();
-
-    console.log(`✓ Data received:`, {
-      posts: processedData.metadata.totalPosts,
-      comments: processedData.metadata.totalComments
-    });
-
-    // Save to file
-    await saveToFile(processedData, searchQuery);
-    
-    setProgress({ current: 95, total: 100 });
-
-    // Save to database
     try {
-      const dbResponse = await fetch('/api/searches', {
+      console.log(`🚀 Sending request to Python backend for: "${searchQuery}"`);
+      
+      const BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:5000';
+      
+      // Simulate loading states progression
+      const stateInterval = setInterval(() => {
+        setCurrentLoadingState(prev => {
+          if (prev < loadingStates.length - 1) {
+            return prev + 1;
+          }
+          return prev;
+        });
+      }, 800);
+      
+      const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          userId: user.id,
-          userEmail: user.email,
-          searchQuery: searchQuery
+          query: searchQuery.trim(),
+          target_comments: 10000,
+          min_score: 5
         })
       });
 
-      if (dbResponse.ok) {
-        await fetchSearchHistory(user.id);
+      clearInterval(stateInterval);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch data from Python backend');
       }
-    } catch (dbError) {
-      console.error('Database save error:', dbError);
-      // Don't fail if DB save fails
+
+      console.log('✓ Received data from Python backend');
+
+      const processedData = await response.json();
+
+      console.log(`✓ Data received:`, {
+        posts: processedData.metadata.totalPosts,
+        comments: processedData.metadata.totalComments
+      });
+
+      // Save to file
+      await saveToFile(processedData, searchQuery);
+
+      // Save to database
+      try {
+        const dbResponse = await fetch('/api/searches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            userEmail: user.email,
+            searchQuery: searchQuery
+          })
+        });
+
+        if (dbResponse.ok) {
+          await fetchSearchHistory(user.id);
+        }
+      } catch (dbError) {
+        console.error('Database save error:', dbError);
+      }
+      
+      // Store data in sessionStorage for analysis page
+      sessionStorage.setItem('reddit_data', JSON.stringify(processedData));
+      sessionStorage.setItem('search_query', searchQuery);
+      
+      // Redirect to analysis page
+      router.push('/analysis');
+      
+    } catch (err: any) {
+      console.error('❌ Fetch error:', err);
+      setError(err.message || 'An error occurred while fetching data');
+      setIsLoading(false);
     }
-    
-    setProgress({ current: 100, total: 100 });
-    
-    setSuccess(
-      `🎉 Saved ${processedData.metadata.totalPosts} posts with ` +
-      `${processedData.metadata.totalComments.toLocaleString()} quality comments to backend!`
-    );
-    setSearchQuery("");
-    
-  } catch (err: any) {
-    console.error('❌ Fetch error:', err);
-    setError(err.message || 'An error occurred while fetching data');
-  } finally {
-    setIsLoading(false);
-  }
-}, [searchQuery, user, fetchSearchHistory, saveToFile]);
+  }, [searchQuery, user, fetchSearchHistory, saveToFile, router]);
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !isLoading) {
@@ -506,13 +454,16 @@ const handleSearch = useCallback(async () => {
         @keyframes particle { 0% { transform: rotate(0deg) translate(var(--start-x), var(--start-y)); opacity: 1; } 70% { transform: rotate(calc(var(--rotate) * 0.5)) translate(calc(var(--end-x) * 1.2), calc(var(--end-y) * 1.2)); opacity: 1; } 85% { transform: rotate(calc(var(--rotate) * 0.66)) translate(var(--end-x), var(--end-y)); opacity: 1; } 100% { transform: rotate(calc(var(--rotate) * 1.2)) translate(calc(var(--end-x) * 0.5), calc(var(--end-y) * 0.5)); opacity: 1; } }
         @keyframes point { 0% { transform: scale(0); opacity: 0; } 25% { transform: scale(calc(var(--scale) * 0.25)); } 38% { opacity: 1; } 65% { transform: scale(var(--scale)); opacity: 1; } 85% { transform: scale(var(--scale)); opacity: 1; } 100% { transform: scale(0); opacity: 0; } }
         .split-parent { display: inline-block; overflow: hidden; transform: translateZ(0); } .split-char { display: inline-block; }
-        .status-container { min-height: 80px; display: flex; align-items: center; justify-content: center; }
-        .loading-transition { transition: opacity 0.2s ease-in-out; }
       `}</style>
-      {/*
-        FIX: Removed inline 'backgroundColor: #000000' and set to 'transparent'
-        This allows the z-index: -1 LiquidChrome component to be visible.
-      */}
+
+      {/* Multi-Step Loader */}
+      <MultiStepLoader 
+        loadingStates={loadingStates} 
+        loading={isLoading} 
+        duration={1000}
+        loop={false}
+      />
+
       <main className="relative h-screen w-full overflow-hidden" style={{ backgroundColor: 'transparent' }}>
         <MemoizedLiquidChrome />
         
@@ -627,8 +578,19 @@ const handleSearch = useCallback(async () => {
             </form>
           </div>
 
-          {/* Status Messages */}
-          <StatusMessages isLoading={isLoading} progress={progress} error={error} success={success} />
+          {/* Error Message */}
+          {error && !isLoading && (
+            <div className="mt-6 text-center pointer-events-auto w-[500px] max-w-[90%]">
+              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 shadow-[0_0_15px_rgba(255,0,0,0.2)]">
+                <div className="flex items-center gap-2 justify-center">
+                  <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-red-200 text-sm font-medium">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </>
