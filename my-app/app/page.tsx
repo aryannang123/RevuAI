@@ -266,7 +266,7 @@ const StatusMessages = React.memo(({ isLoading, progress, error, success }: any)
           </svg>
           <p className="text-green-200 text-sm font-medium">{success}</p>
         </div>
-        <p className="text-green-300/80 text-xs">Check my-app/pre-process/ folder 📁</p>
+        <p className="text-green-300/80 text-xs">Check python-backend/pre-process/ folder 📁</p>
       </div>
     )}
   </div>
@@ -456,7 +456,7 @@ const handleSearch = useCallback(async () => {
     
     setSuccess(
       `🎉 Saved ${processedData.metadata.totalPosts} posts with ` +
-      `${processedData.metadata.totalComments.toLocaleString()} quality comments!`
+      `${processedData.metadata.totalComments.toLocaleString()} quality comments to backend!`
     );
     setSearchQuery("");
     

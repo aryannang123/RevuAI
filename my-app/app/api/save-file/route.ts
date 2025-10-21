@@ -16,8 +16,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create pre-process directory if it doesn't exist
-    const preProcessDir = path.join(process.cwd(), 'pre-process');
+    // Create pre-process directory in backend if it doesn't exist
+    const preProcessDir = path.join(process.cwd(), '..', 'python-backend', 'pre-process');
     
     try {
       await mkdir(preProcessDir, { recursive: true });
@@ -35,9 +35,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      path: `pre-process/${fileName}`,
+      path: `python-backend/pre-process/${fileName}`,
       fullPath: filePath,
-      message: 'File saved successfully'
+      message: 'File saved successfully to backend'
     });
 
   } catch (error: any) {
