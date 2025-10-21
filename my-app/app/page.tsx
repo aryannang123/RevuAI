@@ -460,7 +460,7 @@ export default function Home() {
       <MultiStepLoader 
         loadingStates={loadingStates} 
         loading={isLoading} 
-        duration={1000}
+        duration={4000}
         loop={false}
       />
 
