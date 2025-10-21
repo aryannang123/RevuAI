@@ -1,33 +1,28 @@
 # optimized_reddit_fetcher.py
-# High-performance Reddit data fetcher for 10K+ comments
+# ULTRA-FAST Multi-Account Reddit Fetcher
 
 import requests
 import time
 import os
+import random
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
-import random
+
 class MultiAccountRedditFetcher:
     """
     High-performance Reddit fetcher using multiple accounts
-    Optimized for 10K+ comments with minimal data
+    Optimized for maximum throughput with safety
     """
 
     def __init__(self, accounts: List[Dict[str, str]] = None):
-        """
-        Initialize with multiple Reddit accounts
-        
-        Args:
-            accounts: List of dicts with keys: client_id, client_secret, username, password
-                     If None, loads from environment variables
-        """
+        """Initialize with multiple Reddit accounts"""
         if accounts:
             self.accounts = accounts
         else:
-            # Load single account from env (backward compatible)
+            # Load single account from env
             self.accounts = [{
                 'client_id': os.getenv('REDDIT_CLIENT_ID'),
                 'client_secret': os.getenv('REDDIT_CLIENT_SECRET'),
@@ -45,6 +40,8 @@ class MultiAccountRedditFetcher:
         for idx, acc in enumerate(self.accounts):
             if not all([acc['client_id'], acc['client_secret'], acc['username'], acc['password']]):
                 raise ValueError(f"Account {idx} missing credentials")
+        
+        print(f"✓ Initialized with {len(self.accounts)} account(s)")
 
     def get_access_token(self, account_idx: int = 0) -> str:
         """Get OAuth token for specific account with thread safety"""
@@ -76,7 +73,8 @@ class MultiAccountRedditFetcher:
             response = requests.post(
                 'https://www.reddit.com/api/v1/access_token',
                 headers=headers,
-                data=data
+                data=data,
+                timeout=10
             )
             
             if not response.ok:
@@ -90,6 +88,7 @@ class MultiAccountRedditFetcher:
                 'expires_at': time.time() + (token_data['expires_in'] - 300)
             }
             
+            print(f"  ✓ Account {account_idx + 1} authenticated")
             return token_data['access_token']
 
     def fetch_posts_batch(
@@ -117,22 +116,25 @@ class MultiAccountRedditFetcher:
             'User-Agent': self.user_agent
         }
         
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=15)
         
         if not response.ok:
+            if response.status_code == 429:
+                print(f"⚠️  Account {account_idx} rate limited")
+                time.sleep(30)
             raise Exception(f"Post fetch failed: {response.status_code}")
         
         data = response.json()
         posts = data['data']['children']
         
-        # Filter out media-heavy posts (images/videos)
+        # Filter out media-heavy posts
         text_posts = []
         for post in posts:
             p = post['data']
-            # Skip if it's primarily media
+            # Skip media posts
             if p.get('is_video') or p.get('post_hint') in ['image', 'hosted:video', 'rich:video']:
                 continue
-            # Skip if no text content
+            # Skip posts with no text
             if not p.get('selftext', '').strip() and len(p.get('title', '')) < 20:
                 continue
             text_posts.append(post)
@@ -146,11 +148,7 @@ class MultiAccountRedditFetcher:
         min_score: int = 5,
         account_idx: int = 0
     ) -> List[Dict]:
-        """
-        Fetch only essential comment data
-        
-        Returns: List of {id, text, score, post_title}
-        """
+        """Fetch only essential comment data"""
         token = self.get_access_token(account_idx)
         
         clean_permalink = permalink[1:] if permalink.startswith('/') else permalink
@@ -167,7 +165,7 @@ class MultiAccountRedditFetcher:
             'User-Agent': self.user_agent
         }
         
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=15)
         
         if not response.ok:
             return []
@@ -202,7 +200,7 @@ class MultiAccountRedditFetcher:
                     'post_title': post_title
                 })
                 
-                # Process replies (but limit depth to avoid spam)
+                # Process replies (limit depth)
                 if depth < 3:
                     replies = c.get('replies', {})
                     if isinstance(replies, dict) and 'data' in replies:
@@ -222,44 +220,51 @@ class MultiAccountRedditFetcher:
         """
         Fetch 10K+ comments efficiently using multi-account parallel fetching
         
-        Args:
-            query: Search query
-            target_comments: Target number of comments (default 10000)
-            min_score: Minimum comment score filter (default 5)
-            progress_callback: Optional callback(current, total, stage)
-        
-        Returns:
-            {
-                'comments': [{'id', 'text', 'score', 'post_title'}, ...],
-                'metadata': {...}
-            }
+        OPTIMIZATIONS:
+        - Parallel post fetching
+        - Optimal thread pool sizing
+        - Smart rate limit handling
+        - Minimal delays (only when needed)
         """
         
         print(f"\n{'='*60}")
-        print(f"🚀 MASS FETCH MODE: Targeting {target_comments} comments")
+        print(f"🚀 ULTRA-FAST FETCH MODE")
+        print(f"   Target: {target_comments} comments")
         print(f"   Accounts: {len(self.accounts)}")
         print(f"   Min Score: {min_score}")
         print(f"{'='*60}\n")
         
         start_time = time.time()
-        all_comments = {}  # Use dict for deduplication by ID
+        all_comments = {}
         
-        # PHASE 1: Fetch posts from multiple strategies
+        # PHASE 1: Parallel post fetching with ALL accounts
         if progress_callback:
-            progress_callback(0, 100, 'Fetching posts')
+            progress_callback(0, 100, 'Fetching posts in parallel')
         
+        # Optimized strategies for 3 accounts (9 parallel requests)
         strategies = [
             {'sort': 'top', 't': 'month'},
             {'sort': 'top', 't': 'year'},
             {'sort': 'relevance', 't': 'all'},
-            {'sort': 'comments', 't': 'month'}
+            {'sort': 'comments', 't': 'month'},
+            {'sort': 'top', 't': 'week'},
+            {'sort': 'hot', 't': 'month'},
+            {'sort': 'top', 't': 'all'},
+            {'sort': 'hot', 't': 'week'},
+            {'sort': 'relevance', 't': 'month'}
         ]
         
         all_posts = []
         
-        with ThreadPoolExecutor(max_workers=len(self.accounts)) as executor:
-            futures = []
+        # Use optimal workers for 3 accounts
+        max_workers = min(len(self.accounts) * 3, 9)
+        
+        print(f"Phase 1: Fetching posts with {max_workers} parallel workers...")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_strategy = {}
             
+            # Submit ALL strategies at once
             for idx, strategy in enumerate(strategies):
                 account_idx = idx % len(self.accounts)
                 future = executor.submit(
@@ -270,41 +275,48 @@ class MultiAccountRedditFetcher:
                     time_filter=strategy['t'],
                     account_idx=account_idx
                 )
-                futures.append(future)
+                future_to_strategy[future] = (strategy, account_idx)
             
-            for future in as_completed(futures):
+            # Collect results as they complete
+            for future in as_completed(future_to_strategy.keys()):
+                strategy, acc_idx = future_to_strategy[future]
                 try:
                     posts = future.result()
                     all_posts.extend(posts)
+                    print(f"  ✓ Strategy {strategy['sort']}/{strategy['t']} (Account {acc_idx + 1}): {len(posts)} posts")
                 except Exception as e:
-                    print(f"Warning: Post fetch failed: {e}")
+                    print(f"  ✗ Strategy {strategy['sort']}/{strategy['t']} failed: {e}")
         
-        # Deduplicate posts
+        # Deduplicate and sort
         unique_posts = {p['data']['id']: p for p in all_posts}
         all_posts = list(unique_posts.values())
-        
-        # Sort by comment count
         all_posts.sort(key=lambda p: p['data'].get('num_comments', 0), reverse=True)
         
-        print(f"✓ PHASE 1: Found {len(all_posts)} unique text posts")
+        phase1_time = time.time() - start_time
+        print(f"✓ Phase 1 Complete: {len(all_posts)} posts in {phase1_time:.1f}s")
         
-        # PHASE 2: Fetch comments in parallel
+        # PHASE 2: Aggressive parallel comment fetching
         if progress_callback:
             progress_callback(20, 100, 'Fetching comments')
         
-        comments_per_post = 30  # Fetch top 30 from each post
-        estimated_posts_needed = (target_comments // comments_per_post) + 50
+        comments_per_post = 30
+        estimated_posts_needed = (target_comments // comments_per_post) + 100
         posts_to_process = all_posts[:min(estimated_posts_needed, len(all_posts))]
         
-        print(f"✓ PHASE 2: Processing {len(posts_to_process)} posts for comments")
+        print(f"\nPhase 2: Processing {len(posts_to_process)} posts for comments...")
         
-        with ThreadPoolExecutor(max_workers=len(self.accounts) * 2) as executor:
-            futures = []
+        # CRITICAL: Optimal workers for 3 accounts
+        # Each account = ~60 req/min = 1 req/sec safe rate
+        # With 3 accounts: 9-12 parallel workers is optimal
+        max_workers = min(len(self.accounts) * 4, 12)
+        
+        print(f"  Using {max_workers} parallel workers for comments")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_info = {}
             
+            # Submit ALL posts at once (let executor handle queuing)
             for idx, post in enumerate(posts_to_process):
-                if len(all_comments) >= target_comments:
-                    break
-                
                 account_idx = idx % len(self.accounts)
                 permalink = post['data']['permalink']
                 
@@ -315,55 +327,45 @@ class MultiAccountRedditFetcher:
                     min_score=min_score,
                     account_idx=account_idx
                 )
-                futures.append((future, idx))
+                future_to_info[future] = (idx, account_idx)
             
             completed = 0
-            for future, idx in futures:
+            last_log_time = time.time()
+            
+            for future in as_completed(future_to_info.keys()):
+                idx, acc_idx = future_to_info[future]
                 try:
                     comments = future.result()
                     
-                    # Add to collection (deduplication by ID)
+                    # Add to collection
                     for comment in comments:
                         if comment['id'] not in all_comments:
                             all_comments[comment['id']] = comment
                     
                     completed += 1
                     
-                    if completed % 10 == 0:
+                    # Log progress every 2 seconds
+                    current_time = time.time()
+                    if current_time - last_log_time >= 2:
                         current_count = len(all_comments)
                         progress_pct = min(20 + int((current_count / target_comments) * 70), 90)
                         if progress_callback:
                             progress_callback(progress_pct, 100, f'Comments: {current_count}/{target_comments}')
-                        print(f"  Progress: {current_count} comments from {completed} posts")
+                        print(f"  Progress: {current_count} comments ({completed}/{len(posts_to_process)} posts)")
+                        last_log_time = current_time
                     
-                    # Add random delay (more human-like)
-                    time.sleep(random.uniform(0.5, 1.2))
-                    
-                    # Longer break every 25 posts
-                    if completed % 25 == 0 and completed > 0:
-                        pause = random.uniform(3, 6)
-                        print(f"  Taking a {pause:.1f}s break...")
-                        time.sleep(pause)
-                    
-                    # Stop if target reached
-                    if len(all_comments) >= target_comments:
+                    # Stop if target reached (but let current batch finish)
+                    if len(all_comments) >= target_comments and completed > len(posts_to_process) * 0.5:
                         break
                         
                 except Exception as e:
                     error_msg = str(e)
-                    
-                    # Handle rate limiting
                     if '429' in error_msg:
-                        print(f"⚠️  Rate limit hit! Pausing for 60s...")
-                        time.sleep(60)
-                    
-                    print(f"Warning: Comment fetch failed for post {idx}: {e}")
+                        print(f"  ⚠️  Rate limit on account {acc_idx + 1}")
         
-        # Convert to list and sort by score
+        # Finalize
         final_comments = list(all_comments.values())
         final_comments.sort(key=lambda c: c['score'], reverse=True)
-        
-        # Take top N comments
         final_comments = final_comments[:target_comments]
         
         elapsed = time.time() - start_time
@@ -373,66 +375,45 @@ class MultiAccountRedditFetcher:
         
         print(f"\n{'='*60}")
         print(f"✅ FETCH COMPLETE")
-        print(f"   Comments: {len(final_comments)}")
+        print(f"   Comments: {len(final_comments):,}")
         print(f"   Time: {elapsed:.1f}s")
-        print(f"   Rate: {len(final_comments)/elapsed:.1f} comments/sec")
+        print(f"   Speed: {len(final_comments)/elapsed:.1f} comments/sec")
+        print(f"   Efficiency: {len(final_comments)/(len(self.accounts)*elapsed):.1f} comments/sec/account")
         print(f"{'='*60}\n")
         
-        # Calculate statistics
+        # Statistics
         scores = [c['score'] for c in final_comments]
-
-        # Count unique posts
         unique_post_titles = set(c['post_title'] for c in final_comments)
-        total_posts = len(unique_post_titles)
         
         return {
-                'comments': final_comments,
-                'metadata': {
-                    'query': query,
-                    'totalComments': len(final_comments),
-                    'totalPosts': total_posts,  # ADD THIS LINE
-                    'targetComments': target_comments,
-                    'minScore': min_score,
-                    'averageScore': round(sum(scores) / len(scores)) if scores else 0,
-                    'minScoreValue': min(scores) if scores else 0,
-                    'maxScoreValue': max(scores) if scores else 0,
-                    'fetchTime': round(elapsed, 2),
-                    'commentsPerSecond': round(len(final_comments) / elapsed, 2),
-                    'accountsUsed': len(self.accounts),
-                    'fetchedAt': datetime.utcnow().isoformat(),
-                    'source': 'Reddit API (Multi-Account Optimized)'
+            'comments': final_comments,
+            'metadata': {
+                'query': query,
+                'totalComments': len(final_comments),
+                'totalPosts': len(unique_post_titles),
+                'targetComments': target_comments,
+                'minScore': min_score,
+                'averageScore': round(sum(scores) / len(scores)) if scores else 0,
+                'minScoreValue': min(scores) if scores else 0,
+                'maxScoreValue': max(scores) if scores else 0,
+                'fetchTime': round(elapsed, 2),
+                'commentsPerSecond': round(len(final_comments) / elapsed, 2),
+                'accountsUsed': len(self.accounts),
+                'fetchedAt': datetime.utcnow().isoformat(),
+                'source': 'Reddit API (Ultra-Fast Multi-Account)'
             }
         }
 
-# Example usage
+
+# Test function
 def main():
     import json
     from dotenv import load_dotenv
     
     load_dotenv()
     
-    #Option 2: Multiple accounts (faster)
-    fetcher = MultiAccountRedditFetcher(accounts=[
-        {
-            'client_id': 'xxx1',
-            'client_secret': 'yyy1',
-            'username': 'user1',
-            'password': 'pass1'
-        },
-        {
-            'client_id': 'xxx2',
-            'client_secret': 'yyy2',
-            'username': 'user2',
-            'password': 'pass2'
-        },
-                {
-            'client_id': 'xxx3',
-            'client_secret': 'yyy3',
-            'username': 'user3',
-            'password': 'pass3'
-        }
-
-    ])
+    # Initialize fetcher (loads from .env automatically)
+    fetcher = MultiAccountRedditFetcher()
     
     def progress_callback(current, total, stage):
         print(f"[{current}/{total}] {stage}")
@@ -446,7 +427,7 @@ def main():
         progress_callback=progress_callback
     )
     
-    # Save lightweight data
+    # Save
     filename = f"reddit_comments_{query.replace(' ', '_')}_{int(time.time())}.json"
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
