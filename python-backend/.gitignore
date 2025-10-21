@@ -18,3 +18,6 @@ instance/
 # Local env files
 .env
 .DS_Store
+
+#pre-process data
+/pre-process/*.json
