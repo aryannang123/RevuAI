@@ -367,7 +367,10 @@ export default function AnalysisPage() {
                       "{sentimentData.top_comments.most_negative.text}"
                     </p>
                     <div className="text-red-300/70 text-xs">
-                      Reddit Score: {sentimentData.top_comments.most_negative.reddit_score.toLocaleString()}
+
+                    <div className="text-red-300/70 text-xs">
+                    Reddit Score: {sentimentData?.top_comments?.most_negative?.reddit_score?.toLocaleString() || 'N/A'}
+                    </div>
                     </div>
                   </div>
                 )}
@@ -386,8 +389,9 @@ export default function AnalysisPage() {
                       "{sentimentData.top_comments.most_positive.text}"
                     </p>
                     <div className="text-green-300/70 text-xs">
-                      Reddit Score: {sentimentData.top_comments.most_positive.reddit_score.toLocaleString()}
+                    Reddit Score: {sentimentData?.top_comments?.most_positive?.reddit_score?.toLocaleString() || 'N/A'}
                     </div>
+                    
                   </div>
                 )}
               </div>

@@ -51,7 +51,6 @@ sentiment_analyzer = None
 
 print(f"✓ Initialized with {len(fetcher.accounts)} Reddit account(s)")
 
-
 def create_sentiment_analysis_from_file(reddit_file_path, query):
     """Create sentiment analysis from saved Reddit JSON file - analyze ALL comments"""
     global sentiment_analyzer
@@ -63,23 +62,19 @@ def create_sentiment_analysis_from_file(reddit_file_path, query):
         print("🤖 Loading sentiment analyzer...")
         from transformers import pipeline
         import torch
-        from fast_sentiment_config import SENTIMENT_MODELS, DEFAULT_MODEL
         
         # Use GPU if available, otherwise CPU
         device = 0 if torch.cuda.is_available() else -1
         device_name = "GPU" if device == 0 else "CPU"
         
-        # Get model configuration
-        model_config = SENTIMENT_MODELS[DEFAULT_MODEL]
-        print(f"   Using model: {model_config['model']} ({model_config['speed']})")
         print(f"   Using device: {device_name}")
-        print(f"   Batch size: {model_config['batch_size']}")
         
+        # Use a reliable sentiment model
         sentiment_analyzer = pipeline(
-            "sentiment-analysis", 
-            model=model_config['model'],
+            "sentiment-analysis",
+            model="cardiffnlp/twitter-roberta-base-sentiment-latest",
             device=device,
-            batch_size=model_config['batch_size']
+            batch_size=32
         )
     
     # Read Reddit JSON file
@@ -105,25 +100,15 @@ def create_sentiment_analysis_from_file(reddit_file_path, query):
     for i, comment in enumerate(comments):
         text = comment.get('text', '')
         if text and len(text.strip()) >= 10:
-            valid_comments.append(text[:512])  # Truncate to 512 chars
+            # Truncate to 512 chars for the model
+            truncated_text = text[:512]
+            valid_comments.append(truncated_text)
             valid_indices.append(i)
-        else:
-            # Add neutral comments immediately
-            analyzed_comments.append({
-                'compound': 0.0,
-                'id': comment.get('id', f'comment_{i}'),
-                'post_title': comment.get('post_title', ''),
-                'score': comment.get('score', 0),
-                'sentiment': 'neutral',
-                'text': text
-            })
-            sentiments['neutral'] += 1
     
     print(f"   Processing {len(valid_comments)} valid comments in batches...")
     
-    # Use the configured batch size for optimal speed
-    from fast_sentiment_config import SENTIMENT_MODELS, DEFAULT_MODEL
-    batch_size = SENTIMENT_MODELS[DEFAULT_MODEL]['batch_size']
+    # Process in batches
+    batch_size = 32
     for batch_start in range(0, len(valid_comments), batch_size):
         if batch_start % (batch_size * 10) == 0:
             progress = (batch_start / len(valid_comments)) * 100
@@ -134,37 +119,44 @@ def create_sentiment_analysis_from_file(reddit_file_path, query):
         batch_indices = valid_indices[batch_start:batch_end]
         
         try:
-            # Batch prediction - MUCH faster!
+            # Batch prediction
             results = sentiment_analyzer(batch_texts)
             
             for j, result in enumerate(results):
                 original_index = batch_indices[j]
                 comment = comments[original_index]
                 
-                label = result['label']
+                # FIXED: Proper label interpretation
+                label = result['label'].lower()
                 confidence = result['score']
                 
-                # Convert confidence to compound score (-1 to 1 range)
-                if label == 'positive':
+                # Map the model's labels correctly
+                # cardiffnlp model outputs: 'negative', 'neutral', 'positive'
+                if 'positive' in label or label == 'label_2':
+                    sentiment = 'positive'
                     compound = confidence
-                elif label == 'negative':
+                elif 'negative' in label or label == 'label_0':
+                    sentiment = 'negative'
                     compound = -confidence
-                else:  # neutral
+                else:  # neutral or label_1
+                    sentiment = 'neutral'
                     compound = 0.0
                 
-                sentiments[label] += 1
+                sentiments[sentiment] += 1
                 
                 analyzed_comments.append({
                     'compound': round(compound, 4),
                     'id': comment.get('id', f'comment_{original_index}'),
                     'post_title': comment.get('post_title', ''),
                     'score': comment.get('score', 0),
-                    'sentiment': label,
-                    'text': batch_texts[j]
+                    'sentiment': sentiment,
+                    'text': batch_texts[j],
+                    'confidence': round(confidence, 4)
                 })
                 
         except Exception as e:
-            # If batch fails, mark all as neutral
+            print(f"   Error in batch: {e}")
+            # If batch fails, mark as neutral
             for j in range(len(batch_texts)):
                 original_index = batch_indices[j]
                 comment = comments[original_index]
@@ -175,14 +167,27 @@ def create_sentiment_analysis_from_file(reddit_file_path, query):
                     'post_title': comment.get('post_title', ''),
                     'score': comment.get('score', 0),
                     'sentiment': 'neutral',
-                    'text': batch_texts[j]
+                    'text': batch_texts[j],
+                    'confidence': 0.0
                 })
-                sentiments['neutral'] += len(batch_texts)
-                
-        # Clear memory periodically for large datasets
-        if batch_start % (batch_size * 50) == 0:
-            import gc
-            gc.collect()
+                sentiments['neutral'] += 1
+    
+    # Add comments that were too short (mark as neutral)
+    short_comment_count = len(comments) - len(valid_comments)
+    if short_comment_count > 0:
+        sentiments['neutral'] += short_comment_count
+        for i, comment in enumerate(comments):
+            text = comment.get('text', '')
+            if not text or len(text.strip()) < 10:
+                analyzed_comments.append({
+                    'compound': 0.0,
+                    'id': comment.get('id', f'comment_{i}'),
+                    'post_title': comment.get('post_title', ''),
+                    'score': comment.get('score', 0),
+                    'sentiment': 'neutral',
+                    'text': text,
+                    'confidence': 0.0
+                })
     
     # Calculate results
     total = len(analyzed_comments)
@@ -194,11 +199,11 @@ def create_sentiment_analysis_from_file(reddit_file_path, query):
     
     # Get top comments by compound score
     top_positive = sorted([c for c in analyzed_comments if c['sentiment'] == 'positive'], 
-                         key=lambda x: x['compound'], reverse=True)[:5]
+                         key=lambda x: x['compound'], reverse=True)[:10]
     top_negative = sorted([c for c in analyzed_comments if c['sentiment'] == 'negative'], 
-                         key=lambda x: x['compound'])[:5]
+                         key=lambda x: x['compound'])[:10]
     
-    # Create sentiment analysis result in the requested format
+    # Create sentiment analysis result
     timestamp = int(datetime.now().timestamp())
     sentiment_result = {
         'metadata': {
@@ -216,7 +221,7 @@ def create_sentiment_analysis_from_file(reddit_file_path, query):
             'top_positive_comments': top_positive,
             'top_negative_comments': top_negative
         },
-        'comments': analyzed_comments  # ALL comments with sentiment analysis
+        'comments': analyzed_comments
     }
     
     # Save sentiment file

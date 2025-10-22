@@ -50,183 +50,124 @@ class RedditSentimentAnalyzer:
         
         print("✅ Models loaded successfully!")
 
-    def analyze_comment(self, comment_text, comment_score=0):
-        """Analyze a single comment for sentiment, emotion, and topics"""
-        if not comment_text or len(comment_text.strip()) < 10:
-            return None
-            
-        try:
-            # Truncate very long comments for model efficiency
-            text = comment_text[:512] if len(comment_text) > 512 else comment_text
-            
-            # Sentiment Analysis
-            sentiment_results = self.sentiment_analyzer(text)[0]
-            sentiment_scores = {result['label']: result['score'] for result in sentiment_results}
-            
-            # Map labels to standard format
-            label_mapping = {
-                'LABEL_0': 'NEGATIVE',
-                'LABEL_1': 'NEUTRAL', 
-                'LABEL_2': 'POSITIVE',
-                'negative': 'NEGATIVE',
-                'neutral': 'NEUTRAL',
-                'positive': 'POSITIVE'
-            }
-            
-            # Normalize labels
-            normalized_scores = {}
-            for label, score in sentiment_scores.items():
-                normalized_label = label_mapping.get(label, label.upper())
-                normalized_scores[normalized_label] = score
-            
-            primary_sentiment = max(normalized_scores, key=normalized_scores.get)
-            
-            # Emotion Analysis  
-            emotion_results = self.emotion_analyzer(text)[0]
-            emotion_scores = {result['label']: result['score'] for result in emotion_results}
-            primary_emotion = max(emotion_scores, key=emotion_scores.get)
-            
-            # Topic Classification
-            topic_result = self.topic_classifier(text, self.gaming_topics)
-            primary_topic = topic_result['labels'][0]
-            topic_confidence = topic_result['scores'][0]
-            
-            return {
-                'text': comment_text,
-                'reddit_score': comment_score,
-                'sentiment': {
-                    'primary': primary_sentiment,
-                    'confidence': normalized_scores[primary_sentiment],
-                    'scores': normalized_scores
-                },
-                'emotion': {
-                    'primary': primary_emotion,
-                    'confidence': emotion_scores[primary_emotion],
-                    'scores': emotion_scores
-                },
-                'topic': {
-                    'primary': primary_topic,
-                    'confidence': topic_confidence,
-                    'all_scores': dict(zip(topic_result['labels'][:3], topic_result['scores'][:3]))
-                }
-            }
-            
-        except Exception as e:
-            print(f"❌ Error analyzing comment: {str(e)[:100]}...")
-            return None
-
-    def analyze_json_file(self, file_path):
-        """Analyze all comments in a JSON file"""
-        print(f"📊 Analyzing: {os.path.basename(file_path)}")
+        def analyze_json_file(self, file_path):
+            """Analyze all comments in a JSON file"""
+            print(f"📊 Analyzing: {os.path.basename(file_path)}")
         
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+        # Initialize results dictionary early to prevent 'NameError'
+            analysis_result = {'file_info': {'filename': os.path.basename(file_path), 'analyzed_at': datetime.now().isoformat()}}
+        
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                 data = json.load(f)
             
-            # Handle different JSON structures
-            if 'comments' in data:
-                comments = data['comments']
-            elif 'postsWithComments' in data:
-                # Extract comments from posts structure
-                comments = []
-                for post in data['postsWithComments']:
-                    if 'comments' in post:
-                        comments.extend(post['comments'])
-            else:
-                print("❌ Unknown JSON structure")
-                return None
-                
-            print(f"📝 Found {len(comments)} comments to analyze")
-            
-            analyzed_comments = []
-            sentiment_summary = {'POSITIVE': 0, 'NEGATIVE': 0, 'NEUTRAL': 0}
-            emotion_summary = {}
-            topic_summary = {}
-            
-            # Analyze each comment
-            for i, comment in enumerate(comments):
-                if i % 100 == 0:
-                    print(f"   Progress: {i}/{len(comments)} ({i/len(comments)*100:.1f}%)")
-                
-                # Extract comment text and score
-                if isinstance(comment, dict):
-                    text = comment.get('text', comment.get('body', ''))
-                    score = comment.get('score', 0)
+            # --- Comment Extraction Logic (No Change) ---
+                if 'comments' in data:
+                    comments = data['comments']
+                elif 'postsWithComments' in data:
+                    comments = [c for post in data['postsWithComments'] for c in post.get('comments', [])]
                 else:
-                    text = str(comment)
-                    score = 0
+                    print("❌ Unknown JSON structure")
+                    return None
                 
-                analysis = self.analyze_comment(text, score)
-                if analysis:
-                    analyzed_comments.append(analysis)
+                print(f"📝 Found {len(comments)} total comments to analyze")
+            
+                analyzed_comments = []
+                sentiment_summary = {'POSITIVE': 0, 'NEGATIVE': 0, 'NEUTRAL': 0}
+                emotion_summary = {}
+                topic_summary = {}
+            
+            # --- Analysis Loop (No Change) ---
+                for i, comment in enumerate(comments):
+                # ... (Progress printing and data extraction logic unchanged)
+                    if i % 100 == 0:
+                        print(f"   Progress: {i}/{len(comments)} ({i/len(comments)*100:.1f}%)")
+                
+                    text = comment.get('text', comment.get('body', '')) if isinstance(comment, dict) else str(comment)
+                    score = comment.get('score', 0) if isinstance(comment, dict) else 0
+                
+                    analysis = self.analyze_comment(text, score)
+                
+                    if analysis:
+                        analyzed_comments.append(analysis)
                     
                     # Update summaries
-                    sentiment = analysis['sentiment']['primary']
-                    emotion = analysis['emotion']['primary']
-                    topic = analysis['topic']['primary']
+                        sentiment = analysis['sentiment']['primary']
+                        emotion = analysis['emotion']['primary']
+                        topic = analysis['topic']['primary']
                     
-                    sentiment_summary[sentiment] += 1
-                    emotion_summary[emotion] = emotion_summary.get(emotion, 0) + 1
-                    topic_summary[topic] = topic_summary.get(topic, 0) + 1
+                        sentiment_summary[sentiment] = sentiment_summary.get(sentiment, 0) + 1
+                        emotion_summary[emotion] = emotion_summary.get(emotion, 0) + 1
+                        topic_summary[topic] = topic_summary.get(topic, 0) + 1
             
-            # Calculate percentages
-            total_analyzed = len(analyzed_comments)
-            sentiment_percentages = {k: (v/total_analyzed)*100 for k, v in sentiment_summary.items()}
-            emotion_percentages = {k: (v/total_analyzed)*100 for k, v in emotion_summary.items()}
-            topic_percentages = {k: (v/total_analyzed)*100 for k, v in topic_summary.items()}
+            # --- Result Aggregation and Final Construction (Crucial Section) ---
+                total_analyzed = len(analyzed_comments)
             
-            # Get top comments by sentiment confidence
-            top_positive = sorted([c for c in analyzed_comments if c['sentiment']['primary'] == 'POSITIVE'], 
-                                key=lambda x: x['sentiment']['confidence'], reverse=True)[:5]
-            top_negative = sorted([c for c in analyzed_comments if c['sentiment']['primary'] == 'NEGATIVE'], 
-                                key=lambda x: x['sentiment']['confidence'], reverse=True)[:5]
+                if total_analyzed == 0:
+                    print("⚠️ No comments were successfully analyzed. Returning empty result.")
+                    return analysis_result 
+                
+                sentiment_percentages = {k: (v/total_analyzed)*100 for k, v in sentiment_summary.items()}
+                emotion_percentages = {k: (v/total_analyzed)*100 for k, v in emotion_summary.items()}
+                topic_percentages = {k: (v/total_analyzed)*100 for k, v in topic_summary.items()}
+
+                top_positive = sorted([c for c in analyzed_comments if c['sentiment']['primary'] == 'POSITIVE'], 
+                                  key=lambda x: x['sentiment']['confidence'], reverse=True)[:5]
+                top_negative = sorted([c for c in analyzed_comments if c['sentiment']['primary'] == 'NEGATIVE'], 
+                                  key=lambda x: x['sentiment']['confidence'], reverse=True)[:5]
+                high_scoring = sorted([c for c in analyzed_comments if c['reddit_score'] > 100], 
+                                  key=lambda x: x['reddit_score'], reverse=True)[:10]
             
-            # Get high-scoring comments
-            high_scoring = sorted([c for c in analyzed_comments if c['reddit_score'] > 100], 
-                                key=lambda x: x['reddit_score'], reverse=True)[:10]
+            # Define analysis_result with all computed data
+                analysis_result.update({
+                    'file_info': {
+                        'filename': analysis_result['file_info']['filename'], # Keep original filename
+                        'analyzed_at': analysis_result['file_info']['analyzed_at'],
+                        'total_comments': len(comments),
+                        'successfully_analyzed': total_analyzed
+                    },
+                    'sentiment_analysis': {
+                        'summary': sentiment_percentages,
+                        'raw_counts': sentiment_summary,
+                        'top_positive_comments': top_positive,
+                        'top_negative_comments': top_negative
+                    },
+                # ... (Other sections like emotion_analysis, topic_analysis, and insights remain the same)
+                    'emotion_analysis': {
+                        'summary': emotion_percentages,
+                        'raw_counts': emotion_summary,
+                        'dominant_emotions': sorted(emotion_percentages.items(), key=lambda x: x[1], reverse=True)[:3]
+                    },
+                    'topic_analysis': {
+                        'summary': topic_percentages,
+                        'raw_counts': topic_summary,
+                        'top_topics': sorted(topic_percentages.items(), key=lambda x: x[1], reverse=True)[:5]
+                    },
+                    'insights': {
+                        'overall_sentiment': max(sentiment_percentages, key=sentiment_percentages.get),
+                        'sentiment_confidence': max(sentiment_percentages.values()),
+                        'dominant_emotion': max(emotion_percentages, key=emotion_percentages.get),
+                        'main_topic': max(topic_percentages, key=topic_percentages.get),
+                        'high_scoring_comments': high_scoring
+                    }
+                })
             
-            analysis_result = {
-                'file_info': {
-                    'filename': os.path.basename(file_path),
-                    'analyzed_at': datetime.now().isoformat(),
-                    'total_comments': len(comments),
-                    'successfully_analyzed': total_analyzed
-                },
-                'sentiment_analysis': {
-                    'summary': sentiment_percentages,
-                    'raw_counts': sentiment_summary,
-                    'top_positive_comments': top_positive,
-                    'top_negative_comments': top_negative
-                },
-                'emotion_analysis': {
-                    'summary': emotion_percentages,
-                    'raw_counts': emotion_summary,
-                    'dominant_emotions': sorted(emotion_percentages.items(), key=lambda x: x[1], reverse=True)[:3]
-                },
-                'topic_analysis': {
-                    'summary': topic_percentages,
-                    'raw_counts': topic_summary,
-                    'top_topics': sorted(topic_percentages.items(), key=lambda x: x[1], reverse=True)[:5]
-                },
-                'insights': {
-                    'overall_sentiment': max(sentiment_percentages, key=sentiment_percentages.get),
-                    'sentiment_confidence': max(sentiment_percentages.values()),
-                    'dominant_emotion': max(emotion_percentages, key=emotion_percentages.get),
-                    'main_topic': max(topic_percentages, key=topic_percentages.get),
-                    'high_scoring_comments': high_scoring
-                }
-            }
+                print(f"✅ Analysis complete!")
+                print(f"   Sentiment: {analysis_result['insights']['overall_sentiment']} ({analysis_result['insights']['sentiment_confidence']:.1f}%)")
+                print(f"   Emotion: {analysis_result['insights']['dominant_emotion']}")
+                print(f"   Topic: {analysis_result['insights']['main_topic']}")
             
-            print(f"✅ Analysis complete!")
-            print(f"   Sentiment: {analysis_result['insights']['overall_sentiment']} ({analysis_result['insights']['sentiment_confidence']:.1f}%)")
-            print(f"   Emotion: {analysis_result['insights']['dominant_emotion']}")
-            print(f"   Topic: {analysis_result['insights']['main_topic']}")
+                return analysis_result
             
-            return analysis_result
-            
-        except Exception as e:
-            print(f"❌ Error analyzing file: {str(e)}")
-            return None
+            except Exception as e:
+            # We already initialized analysis_result, so we can return it partially filled, 
+            # or just return None after logging the full error.
+                import traceback
+                print(f"🚨 FATAL ERROR PROCESSING FILE: {analysis_result['file_info']['filename']}")
+                print(f"Error details: {str(e)}")
+                print(traceback.format_exc())
+                return None
+
 
     def analyze_all_files(self, directory_path="pre-process"):
         """Analyze all JSON files in the directory"""
