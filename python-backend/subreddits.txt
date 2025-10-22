@@ -1,0 +1,76 @@
+tech_subreddits = [
+    "technology", "technews", "techsupport", "technooptimist", "gadgets",
+    "buildapc", "hardware", "computerhelp", "pcmasterrace", "laptops",
+    "overclocking", "linux", "windows", "apple", "mac", "android",
+    "ios", "surface", "chromeos", "ubuntu", "fedora", "archlinux",
+    "CyberSecurity", "netsec", "hacking", "reverseengineering",
+    "ethicalhacking", "infosec", "sysadmin", "ITCareerQuestions",
+    "learnprogramming", "webdev", "programming", "javascript",
+    "Python", "Coding", "reactjs", "frontend", "devops",
+    "machinelearning", "artificial", "ArtificialIntelligence",
+    "DeepLearning", "DataScience", "datascienceproject", "bigdata",
+    "privacy", "opensource", "Futurology", "IOT", "QuantumComputing",
+    "robotics", "DroneTechnology", "drones", "Arduino", "RaspberryPi",
+    "electronics", "embedded", "engineering", "CAD", "3Dprinting",
+    "SoftwareEngineering", "Database", "cloudcomputing", "it", "digitalnomad",
+    "sideproject", "ProductManagement", "startups", "techbusiness", "fintech",
+    "blockchain", "crypto", "solidity", "vrdev", "arvr", "MetaQuest", "PCGamingTechSupport",
+    "oculus", "virtualreality", "plasticsurgerytech", "HomeNetworking",
+    "Networking", "Wireless", "5Gtechnology", "Datacenter", "PowerShell",
+    "bash", "CompTIA", "aws", "azure", "gcp", "cloud", "edgecomputing",
+    "QuantumProgramming", "compsci", "databases", "SQL", "NoSQL",
+    "postgresql", "sqlite", "MySQL", "programmerhumor", "techsupportgore",
+    "sysadminhumor", "coolguides", "humancentrictech", "InternetIsBeautiful",
+    "Entrepreneur", "UXDesign", "UI_Design", "HardwareSwap", "MechanicalKeyboards",
+    "hometheater", "audiophile", "4kTV", "OLED", "monitors", "graphicscards",
+    # ... include here additional subreddits from deep-dives for a full 500+ list
+]
+
+phone_subreddits = [
+    "Android", "iOS", "AndroidQuestions", "MobilePhones", "mobilerepair",
+    "TechPhones", "PickAnAndroidForMe", "iPhone", "iPad", "Samsung",
+    "GooglePixel", "OnePlus", "nokia", "motorola", "sony", "Xiaomi",
+    "honor", "oppo", "realme", "Asus", "Surface", "BlackBerry",
+    "WindowsPhone", "UbuntuPhone", "iosgaming", "AppleWatch", "Smartwatches",
+    "AppleHelp", "AndroidApps", "iOSApps", "PhonePhotography",
+    "MobilePhotography", "AppHookup", "Mobile", "5G", "Cellular",
+    "Telecom", "Carriers", "SmartphoneReviews", "phonecases", "mobileaccessories",
+    "wearables", "fitbit", "smartwatch", "PhoneDeals", "TechDeals",
+    "Cheap_Meals",
+    # ... more phone brand and accessory subreddits, regional phone enthusiast groups, network carriers
+]
+
+gaming_subreddits = [
+    "gaming", "Games", "GameReviews", "PatientGamers", "ShouldIBuyThisGame",
+    "GameDeals", "GamePhysics", "GamingSuggestions", "LowEndGaming", "TrueGaming",
+    "LocalMultiplayerGames", "esports", "Fighters", "RPG_Gamers", "HorrorGaming",
+    "creepygaming", "SimulationGames", "tycoon", "simracing", "trainsim",
+    "trucksim", "FarmingSimulator", "JRPG", "walkingsimulators", "Steam",
+    "SteamDeck", "pcgaming", "ConsoleGaming", "PlayStation", "PS4", "PS5",
+    "NintendoSwitch", "XboxSeriesX", "XboxOne", "RetroGaming", "classicgames",
+    "emulation", "EmuDev", "MAME", "CemuPiracy", "GamingLeaksAndRumors",
+    "GamerPals", "Speedrun", "GameDev", "IndieDev", "Unity3D", "godot",
+    "UnrealEngine", "GameDesign", "Modding", "SourceEngine", "SkyrimMods",
+    "Minecraft", "stardewvalley", "APexLegends", "VALORANT", "leagueoflegends",
+    "dota2", "overwatch", "CSGO", "Halo", "Fortnite", "Eldenring", "zelda",
+    "cyberpunkgame", "AssassinsCreed", "CallOfDuty", "GTA", "Fallout",
+    "BaldursGate3", "starfield", "arma", "arma3", "DayZ", "RustConsole",
+    "portal", "Subnautica", "Terraria", "Factorio", "SatisfactoryGame",
+    "kerbalspaceprogram", "EscapeFromTarkov", "Diablo4", "PUBG", "AmongUs",
+    "GachaGaming", "Pokemon", "pokemongo", "FinalFantasy", "DragonQuest", 
+    "DarkSouls", "Speedrun", "Roguelikes", "BattleRoyaleGames", "MMORPG",
+    "WOW", "FFXIV", "Runescape", "OSRS", "VRC", "VRGaming", "SteamVR", "MetaQuest",
+    # ... include genre, platform-specific, and community subs towards 500+
+]
+
+movie_subreddits = [
+    "movies", "TrueFilm", "BoxOffice", "ClassicFilms", "Flicks", "MovieDetails",
+    "MovieSuggestions", "MovieReviews", "Television", "netflix", "NetflixBestOf",
+    "StreamingBestOf", "hbo", "DisneyPlus", "Hulu", "PrimeVideo", "Horror",
+    "SciFiMovies", "ActionMovies", "ComedyMovies", "Documentaries", "shortfilms",
+    "Marvel", "DC_Cinematic", "StarWars", "MiddleEarth", "CinemaConnoisseurs",
+    "Filmmakers", "Screenwriting", "Cinematography", "EditMyFilm", "IndieFilmmakers",
+    "FilmNoir", "AnimatedMovies", "Anime", "TVDetails", "MovieSuggestionsAlt",
+    "Criterion", "Directors",
+    # ... more film genre-specific, award-related, and fan subs to build 500+
+]
