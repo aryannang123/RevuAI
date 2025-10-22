@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Reddit Comment Sentiment Analysis using Hugging Face Models
+Reddit Comment Sentiment Analysis using Hugging Face Models with GPU Acceleration
 Analyzes JSON files in pre-process folder for sentiment, emotions, and topics
 """
 
@@ -8,30 +8,42 @@ import json
 import os
 from datetime import datetime
 from transformers import pipeline
+import torch
 import warnings
 warnings.filterwarnings("ignore")
 
+# Import GPU configuration
+from fast_sentiment_config import DEVICE, DEVICE_NAME, MAX_BATCH_SIZE, TRUNCATE_LENGTH
+
 class RedditSentimentAnalyzer:
     def __init__(self):
-        """Initialize the sentiment analyzer with pre-trained models"""
-        print("🤖 Loading Hugging Face models...")
+        """Initialize the sentiment analyzer with GPU-accelerated pre-trained models"""
+        print("🤖 Loading Hugging Face models with GPU acceleration...")
+        print(f"🔧 Device: {DEVICE_NAME} (device={DEVICE})")
+        print(f"📦 Batch size: {MAX_BATCH_SIZE}")
         
-        # Best models for different tasks
+        # GPU-accelerated models for different tasks
         self.sentiment_analyzer = pipeline(
             "sentiment-analysis",
             model="cardiffnlp/twitter-roberta-base-sentiment-latest",
-            return_all_scores=True
+            return_all_scores=True,
+            device=DEVICE,
+            batch_size=MAX_BATCH_SIZE
         )
         
         self.emotion_analyzer = pipeline(
             "text-classification",
             model="j-hartmann/emotion-english-distilroberta-base",
-            return_all_scores=True
+            return_all_scores=True,
+            device=DEVICE,
+            batch_size=MAX_BATCH_SIZE
         )
         
         self.topic_classifier = pipeline(
             "zero-shot-classification",
-            model="facebook/bart-large-mnli"
+            model="facebook/bart-large-mnli",
+            device=DEVICE,
+            batch_size=MAX_BATCH_SIZE // 2  # Smaller batch for zero-shot
         )
         
         # Gaming-specific topics for classification
@@ -48,9 +60,149 @@ class RedditSentimentAnalyzer:
             "performance optimization"
         ]
         
-        print("✅ Models loaded successfully!")
+        print("✅ GPU-accelerated models loaded successfully!")
 
-        def analyze_json_file(self, file_path):
+    def analyze_comment(self, text, reddit_score=0):
+        """Analyze a single comment for sentiment, emotion, and topic with GPU acceleration"""
+        if not text or len(text.strip()) < 3:
+            return None
+            
+        # Truncate text for faster processing
+        text = text[:TRUNCATE_LENGTH]
+        
+        try:
+            # Sentiment analysis
+            sentiment_results = self.sentiment_analyzer(text)
+            sentiment_scores = {result['label']: result['score'] for result in sentiment_results}
+            primary_sentiment = max(sentiment_scores, key=sentiment_scores.get)
+            
+            # Emotion analysis
+            emotion_results = self.emotion_analyzer(text)
+            emotion_scores = {result['label']: result['score'] for result in emotion_results}
+            primary_emotion = max(emotion_scores, key=emotion_scores.get)
+            
+            # Topic classification
+            topic_result = self.topic_classifier(text, self.gaming_topics)
+            primary_topic = topic_result['labels'][0]
+            topic_scores = {label: score for label, score in zip(topic_result['labels'], topic_result['scores'])}
+            
+            return {
+                'text': text,
+                'reddit_score': reddit_score,
+                'sentiment': {
+                    'primary': primary_sentiment,
+                    'confidence': sentiment_scores[primary_sentiment],
+                    'all_scores': sentiment_scores
+                },
+                'emotion': {
+                    'primary': primary_emotion,
+                    'confidence': emotion_scores[primary_emotion],
+                    'all_scores': emotion_scores
+                },
+                'topic': {
+                    'primary': primary_topic,
+                    'confidence': topic_scores[primary_topic],
+                    'all_scores': topic_scores
+                }
+            }
+            
+        except Exception as e:
+            print(f"⚠️ Error analyzing comment: {str(e)}")
+            return None
+
+    def analyze_comments_batch(self, comments_data):
+        """Analyze multiple comments in batches for maximum GPU efficiency"""
+        print(f"🚀 Starting batch analysis with GPU acceleration...")
+        
+        # Prepare texts and metadata
+        texts = []
+        metadata = []
+        
+        for comment in comments_data:
+            text = comment.get('text', comment.get('body', '')) if isinstance(comment, dict) else str(comment)
+            score = comment.get('score', 0) if isinstance(comment, dict) else 0
+            
+            if text and len(text.strip()) >= 3:
+                texts.append(text[:TRUNCATE_LENGTH])
+                metadata.append({'original_text': text, 'reddit_score': score})
+        
+        if not texts:
+            return []
+        
+        print(f"📊 Processing {len(texts)} comments in batches of {MAX_BATCH_SIZE}")
+        
+        try:
+            # Batch sentiment analysis
+            print("🎭 Running sentiment analysis...")
+            sentiment_results = self.sentiment_analyzer(texts)
+            
+            # Batch emotion analysis
+            print("😊 Running emotion analysis...")
+            emotion_results = self.emotion_analyzer(texts)
+            
+            # Topic analysis (smaller batches due to complexity)
+            print("🏷️ Running topic classification...")
+            topic_results = []
+            batch_size = MAX_BATCH_SIZE // 2
+            
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:i + batch_size]
+                batch_topics = []
+                
+                for text in batch_texts:
+                    topic_result = self.topic_classifier(text, self.gaming_topics)
+                    batch_topics.append(topic_result)
+                
+                topic_results.extend(batch_topics)
+            
+            # Combine results
+            analyzed_comments = []
+            for i, (sentiment, emotion, topic, meta) in enumerate(zip(sentiment_results, emotion_results, topic_results, metadata)):
+                
+                # Process sentiment
+                sentiment_scores = {result['label']: result['score'] for result in sentiment}
+                primary_sentiment = max(sentiment_scores, key=sentiment_scores.get)
+                
+                # Process emotion
+                emotion_scores = {result['label']: result['score'] for result in emotion}
+                primary_emotion = max(emotion_scores, key=emotion_scores.get)
+                
+                # Process topic
+                primary_topic = topic['labels'][0]
+                topic_scores = {label: score for label, score in zip(topic['labels'], topic['scores'])}
+                
+                analyzed_comments.append({
+                    'text': texts[i],
+                    'reddit_score': meta['reddit_score'],
+                    'sentiment': {
+                        'primary': primary_sentiment,
+                        'confidence': sentiment_scores[primary_sentiment],
+                        'all_scores': sentiment_scores
+                    },
+                    'emotion': {
+                        'primary': primary_emotion,
+                        'confidence': emotion_scores[primary_emotion],
+                        'all_scores': emotion_scores
+                    },
+                    'topic': {
+                        'primary': primary_topic,
+                        'confidence': topic_scores[primary_topic],
+                        'all_scores': topic_scores
+                    }
+                })
+            
+            print(f"✅ Batch analysis complete! Processed {len(analyzed_comments)} comments")
+            return analyzed_comments
+            
+        except Exception as e:
+            print(f"🚨 Error in batch analysis: {str(e)}")
+            # Fallback to individual analysis
+            print("🔄 Falling back to individual comment analysis...")
+            return [self.analyze_comment(text, meta['reddit_score']) 
+                   for text, meta in zip(texts, metadata) 
+                   if self.analyze_comment(text, meta['reddit_score']) is not None]
+
+    def analyze_json_file(self, file_path):
             """Analyze all comments in a JSON file"""
             print(f"📊 Analyzing: {os.path.basename(file_path)}")
         
@@ -77,28 +229,23 @@ class RedditSentimentAnalyzer:
                 emotion_summary = {}
                 topic_summary = {}
             
-            # --- Analysis Loop (No Change) ---
-                for i, comment in enumerate(comments):
-                # ... (Progress printing and data extraction logic unchanged)
-                    if i % 100 == 0:
-                        print(f"   Progress: {i}/{len(comments)} ({i/len(comments)*100:.1f}%)")
+            # --- GPU-Accelerated Batch Analysis ---
+                print("🚀 Using GPU batch processing for maximum speed...")
+                analyzed_comments = self.analyze_comments_batch(comments)
                 
-                    text = comment.get('text', comment.get('body', '')) if isinstance(comment, dict) else str(comment)
-                    score = comment.get('score', 0) if isinstance(comment, dict) else 0
+                # Update summaries from batch results
+                sentiment_summary = {'POSITIVE': 0, 'NEGATIVE': 0, 'NEUTRAL': 0}
+                emotion_summary = {}
+                topic_summary = {}
                 
-                    analysis = self.analyze_comment(text, score)
-                
-                    if analysis:
-                        analyzed_comments.append(analysis)
+                for analysis in analyzed_comments:
+                    sentiment = analysis['sentiment']['primary']
+                    emotion = analysis['emotion']['primary']
+                    topic = analysis['topic']['primary']
                     
-                    # Update summaries
-                        sentiment = analysis['sentiment']['primary']
-                        emotion = analysis['emotion']['primary']
-                        topic = analysis['topic']['primary']
-                    
-                        sentiment_summary[sentiment] = sentiment_summary.get(sentiment, 0) + 1
-                        emotion_summary[emotion] = emotion_summary.get(emotion, 0) + 1
-                        topic_summary[topic] = topic_summary.get(topic, 0) + 1
+                    sentiment_summary[sentiment] = sentiment_summary.get(sentiment, 0) + 1
+                    emotion_summary[emotion] = emotion_summary.get(emotion, 0) + 1
+                    topic_summary[topic] = topic_summary.get(topic, 0) + 1
             
             # --- Result Aggregation and Final Construction (Crucial Section) ---
                 total_analyzed = len(analyzed_comments)

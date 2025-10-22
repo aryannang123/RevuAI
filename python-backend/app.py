@@ -170,7 +170,6 @@ def create_sentiment_analysis_from_file(reddit_file_path, query):
                     'text': batch_texts[j],
                     'confidence': 0.0
                 })
-                sentiments['neutral'] += 1
     
     # Add comments that were too short (mark as neutral)
     short_comment_count = len(comments) - len(valid_comments)
@@ -188,6 +187,7 @@ def create_sentiment_analysis_from_file(reddit_file_path, query):
                     'text': text,
                     'confidence': 0.0
                 })
+
     
     # Calculate results
     total = len(analyzed_comments)
@@ -493,9 +493,15 @@ def analyze_data():
                 continue
             
             try:
-                # Simple sentiment analysis using transformers
+                # GPU-accelerated sentiment analysis using transformers
                 from transformers import pipeline
-                analyzer = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
+                import torch
+                device = 0 if torch.cuda.is_available() else -1
+                analyzer = pipeline(
+                    "sentiment-analysis", 
+                    model="cardiffnlp/twitter-roberta-base-sentiment-latest",
+                    device=device
+                )
                 result = analyzer(text[:512])
                 
                 label = result[0]['label']

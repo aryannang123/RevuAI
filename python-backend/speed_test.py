@@ -6,7 +6,7 @@ Test different sentiment analysis speeds
 import time
 import json
 from transformers import pipeline
-from fast_sentiment_config import SENTIMENT_MODELS
+from fast_sentiment_config import SENTIMENT_MODELS, DEVICE, DEVICE_NAME
 
 def test_model_speed(model_name, test_comments):
     """Test the speed of a specific model"""
@@ -16,11 +16,16 @@ def test_model_speed(model_name, test_comments):
     print(f"   Model: {config['model']}")
     print(f"   Batch size: {config['batch_size']}")
     
-    # Load model
+    # Load model with GPU acceleration
     start_time = time.time()
-    analyzer = pipeline("sentiment-analysis", model=config['model'], batch_size=config['batch_size'])
+    analyzer = pipeline(
+        "sentiment-analysis", 
+        model=config['model'], 
+        batch_size=config['batch_size'],
+        device=DEVICE
+    )
     load_time = time.time() - start_time
-    print(f"   Load time: {load_time:.2f}s")
+    print(f"   Load time: {load_time:.2f}s ({DEVICE_NAME})")
     
     # Test analysis
     start_time = time.time()

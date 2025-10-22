@@ -11,9 +11,18 @@ PERFORMANCE OPTIMIZATION GUIDE:
 
 import torch
 
-# Check GPU availability
-DEVICE = 0 if torch.cuda.is_available() else -1
+# Check GPU availability with detailed info
+CUDA_AVAILABLE = torch.cuda.is_available()
+DEVICE = 0 if CUDA_AVAILABLE else -1
 DEVICE_NAME = "GPU" if DEVICE == 0 else "CPU"
+
+# GPU information
+if CUDA_AVAILABLE:
+    GPU_NAME = torch.cuda.get_device_name(0)
+    GPU_MEMORY = torch.cuda.get_device_properties(0).total_memory / 1e9
+    GPU_INFO = f"{GPU_NAME} ({GPU_MEMORY:.1f} GB)"
+else:
+    GPU_INFO = "Not available"
 
 # Model configurations (ordered by speed)
 SENTIMENT_MODELS = {
@@ -52,8 +61,12 @@ USE_QUANTIZATION = DEVICE == -1  # Quantize on CPU for 2-3x speedup
 
 print(f"🚀 Sentiment Analysis Config:")
 print(f"   Device: {DEVICE_NAME}")
+if CUDA_AVAILABLE:
+    print(f"   GPU: {GPU_INFO}")
 print(f"   Model: {SENTIMENT_MODELS[DEFAULT_MODEL]['model']}")
 print(f"   Batch Size: {MAX_BATCH_SIZE}")
 print(f"   Truncate: {TRUNCATE_LENGTH} tokens")
 if USE_QUANTIZATION:
     print(f"   CPU Quantization: Enabled")
+if not CUDA_AVAILABLE:
+    print(f"   💡 Install CUDA PyTorch for GPU acceleration: python setup_gpu.py")
