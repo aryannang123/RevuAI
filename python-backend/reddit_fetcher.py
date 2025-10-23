@@ -102,12 +102,21 @@ class MultiAccountRedditFetcher:
         """Fetch posts using specific account"""
         token = self.get_access_token(account_idx)
         
+        # Improve query formatting for better search results
+        formatted_query = query.strip()
+        
+        # For multi-word queries, try both phrase and individual terms
+        if ' ' in formatted_query and not formatted_query.startswith('"'):
+            # Add quotes for exact phrase matching when appropriate
+            formatted_query = f'"{formatted_query}"'
+        
         url = (
             f"https://oauth.reddit.com/search.json"
-            f"?q={requests.utils.quote(query.strip())}"
+            f"?q={requests.utils.quote(formatted_query)}"
             f"&limit={limit}"
             f"&sort={sort}"
             f"&t={time_filter}"
+            f"&type=link"  # Focus on link posts (not just comments)
             f"&raw_json=1"
         )
         
@@ -127,18 +136,36 @@ class MultiAccountRedditFetcher:
         data = response.json()
         posts = data['data']['children']
         
-        # Filter out media-heavy posts
+        # Filter out media-heavy posts and ensure relevance to query
         text_posts = []
+        query_keywords = [word.lower().strip() for word in query.lower().split() if len(word.strip()) > 2]
+        
         for post in posts:
             p = post['data']
+            
             # Skip media posts
             if p.get('is_video') or p.get('post_hint') in ['image', 'hosted:video', 'rich:video']:
                 continue
+                
             # Skip posts with no text
             if not p.get('selftext', '').strip() and len(p.get('title', '')) < 20:
                 continue
-            text_posts.append(post)
+            
+            # CRITICAL: Ensure post is actually related to the search query
+            title = p.get('title', '').lower()
+            selftext = p.get('selftext', '').lower()
+            combined_text = f"{title} {selftext}"
+            
+            # Check if at least one query keyword appears in title or text
+            has_keyword = any(keyword in combined_text for keyword in query_keywords)
+            
+            if has_keyword:
+                text_posts.append(post)
+            else:
+                # Debug: Show what was filtered out
+                print(f"   Filtered irrelevant post: {p.get('title', '')[:50]}...")
         
+        print(f"   Filtered {len(posts)} -> {len(text_posts)} relevant posts")
         return text_posts
 
     def fetch_comments_lightweight(
@@ -146,7 +173,8 @@ class MultiAccountRedditFetcher:
         permalink: str,
         limit: int = 50,
         min_score: int = 5,
-        account_idx: int = 0
+        account_idx: int = 0,
+        query: str = ""
     ) -> List[Dict]:
         """Fetch only essential comment data"""
         token = self.get_access_token(account_idx)
@@ -180,6 +208,9 @@ class MultiAccountRedditFetcher:
         
         lightweight_comments = []
         
+        # Prepare query keywords for relevance filtering
+        query_keywords = [word.lower().strip() for word in query.lower().split() if len(word.strip()) > 2] if query else []
+        
         def extract_comments(comment_list, depth=0):
             for comment in comment_list:
                 if comment.get('kind') != 't1':
@@ -192,6 +223,22 @@ class MultiAccountRedditFetcher:
                 # Filter low-quality comments
                 if score < min_score or len(body) < 10 or body in ['[deleted]', '[removed]']:
                     continue
+                
+                # CRITICAL: Filter comments for relevance to search query
+                if query_keywords:
+                    body_lower = body.lower()
+                    title_lower = post_title.lower()
+                    combined_text = f"{body_lower} {title_lower}"
+                    
+                    # Check if comment or post title contains query keywords
+                    has_keyword = any(keyword in combined_text for keyword in query_keywords)
+                    
+                    # Also check for partial matches (for compound terms like "apple watch")
+                    query_lower = query.lower()
+                    has_phrase = query_lower in combined_text
+                    
+                    if not (has_keyword or has_phrase):
+                        continue  # Skip irrelevant comments
                 
                 lightweight_comments.append({
                     'id': c['id'],
@@ -241,17 +288,17 @@ class MultiAccountRedditFetcher:
         if progress_callback:
             progress_callback(0, 100, 'Fetching posts in parallel')
         
-        # Optimized strategies for 3 accounts (9 parallel requests)
+        # Optimized strategies prioritizing relevance for better query matching
         strategies = [
-            {'sort': 'top', 't': 'month'},
-            {'sort': 'top', 't': 'year'},
-            {'sort': 'relevance', 't': 'all'},
-            {'sort': 'comments', 't': 'month'},
-            {'sort': 'top', 't': 'week'},
-            {'sort': 'hot', 't': 'month'},
-            {'sort': 'top', 't': 'all'},
-            {'sort': 'hot', 't': 'week'},
-            {'sort': 'relevance', 't': 'month'}
+            {'sort': 'relevance', 't': 'all'},      # Most relevant overall
+            {'sort': 'relevance', 't': 'year'},     # Most relevant this year
+            {'sort': 'relevance', 't': 'month'},    # Most relevant this month
+            {'sort': 'comments', 't': 'month'},     # Most discussed recently
+            {'sort': 'comments', 't': 'year'},      # Most discussed this year
+            {'sort': 'top', 't': 'month'},          # Top posts this month
+            {'sort': 'top', 't': 'year'},           # Top posts this year
+            {'sort': 'hot', 't': 'month'},          # Currently trending
+            {'sort': 'new', 't': 'month'}           # Recent discussions
         ]
         
         all_posts = []
@@ -325,7 +372,8 @@ class MultiAccountRedditFetcher:
                     permalink=permalink,
                     limit=100,
                     min_score=min_score,
-                    account_idx=account_idx
+                    account_idx=account_idx,
+                    query=query
                 )
                 future_to_info[future] = (idx, account_idx)
             
