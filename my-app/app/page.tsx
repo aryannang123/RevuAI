@@ -248,6 +248,29 @@ export default function Home() {
 
       <main className="relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-gray-950 via-purple-950 to-gray-950">
         <ParticlesBackground />
+
+        {/* Top Navigation Bar */}
+<nav className="absolute top-6 left-1/2 -translate-x-1/2 z-40 flex space-x-8 bg-gray-900/40 backdrop-blur-md border border-cyan-500/20 rounded-2xl px-8 py-3 shadow-lg shadow-cyan-500/10">
+  <a
+    href="#home"
+    className="text-cyan-300 hover:text-white font-medium transition-colors duration-300"
+  >
+    Home
+  </a>
+  <a
+    href="about"
+    className="text-cyan-300 hover:text-white font-medium transition-colors duration-300"
+  >
+    About
+  </a>
+  <a
+    href="contact"
+    className="text-cyan-300 hover:text-white font-medium transition-colors duration-300"
+  >
+    Contact
+  </a>
+</nav>
+
         
         {/* Animated gradient orbs */}
         <div className="absolute top-20 left-20 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse pointer-events-none"></div>
