@@ -74,8 +74,9 @@ const ProfileCardComponent = ({
         '--pointer-from-center': `${clamp(Math.hypot(percentY - 50, percentX - 50) / 50, 0, 1)}`,
         '--pointer-from-top': `${percentY / 100}`,
         '--pointer-from-left': `${percentX / 100}`,
-        '--rotate-x': `${round(-(centerX / 5))}deg`,
-        '--rotate-y': `${round(centerY / 4)}deg`
+        '--rotate-x': `${round(-(centerX / 7))}deg`,
+        '--rotate-y': `${round(centerY / 6)}deg`
+
       };
 
       Object.entries(properties).forEach(([property, value]) => {
@@ -265,10 +266,16 @@ const ProfileCardComponent = ({
 
   return (
     <div ref={wrapRef} className={`pc-card-wrapper ${className}`.trim()}>
-      <section ref={cardRef} className="pc-card" style={cardStyle}>
+        <section ref={cardRef} className="pc-card" style={cardStyle}>
         <div className="pc-inside" style={innerCardStyle}>
-          <div className="pc-shine" />
-          <div className="pc-glare" />
+        {/* Remove holographic shine if showBehindGradient is false */}
+        {showBehindGradient && (
+      <>
+        <div className="pc-shine" />
+        <div className="pc-glare" />
+      </>
+    )}
+
           <div className="pc-content pc-avatar-content">
             {showUserInfo && (
               <div className="pc-user-info">
