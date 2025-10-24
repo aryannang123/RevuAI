@@ -17,6 +17,106 @@ export default function AnalysisPage() {
   const [animatedStats, setAnimatedStats] = useState({ positive: 0, negative: 0, neutral: 0 });
   const [activeChart, setActiveChart] = useState('overview');
 
+  // Utility function to format AI summary text
+  const formatAISummary = (summaryText: string) => {
+    if (!summaryText) return null;
+
+    // Clean up unwanted prefixes and formatting issues
+    let cleanedText = summaryText
+      // Remove "Here's an intelligent summary" with any variations
+      .replace(/^.*?Here's an intelligent summary.*?regarding.*?[":]\s*/i, '')
+      .replace(/^.*?Here's an intelligent summary.*?[":]\s*/i, '')
+      // Remove numbered prefixes
+      .replace(/^\d+[\s\.\)]+/, '')
+      // Remove other common AI prefixes
+      .replace(/^(Based on|According to|Analysis shows|The data reveals|Summary:|Analysis:).*?[":]\s*/i, '')
+      // Remove any remaining leading colons or dashes
+      .replace(/^[:;\-\s]+/, '')
+      // Clean up extra whitespace and line breaks
+      .trim();
+
+    // Use the cleaned text for all further processing
+    summaryText = cleanedText;
+
+    // Check for bullet points with • symbol
+    if (summaryText.includes('•')) {
+      const points = summaryText.split('•').filter(point => point.trim().length > 0);
+      return (
+        <div className="space-y-4">
+          {points.map((point, index) => (
+            <div key={index} className="flex items-start gap-3">
+              <div className="w-2 h-2 bg-indigo-400 rounded-full mt-3 flex-shrink-0"></div>
+              <p className="text-gray-200 text-lg leading-relaxed font-medium">
+                {point.trim()}
+              </p>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Check for numbered points (1., 2., etc.)
+    if (/^\s*\d+\.\s/.test(summaryText) || summaryText.includes('\n1.') || summaryText.includes(' 1.')) {
+      const points = summaryText.split(/(?=\d+\.\s)/).filter(point => point.trim().length > 0);
+      return (
+        <div className="space-y-4">
+          {points.map((point, index) => {
+            const cleanPoint = point.replace(/^\d+\.\s*/, '').trim();
+            if (!cleanPoint) return null;
+            return (
+              <div key={index} className="flex items-start gap-3">
+                <div className="w-7 h-7 bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-300 text-sm font-bold flex-shrink-0 mt-1">
+                  {index + 1}
+                </div>
+                <p className="text-gray-200 text-lg leading-relaxed font-medium">
+                  {cleanPoint}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Check for dash points (-, -, etc.)
+    if (summaryText.includes('\n-') || summaryText.includes('\n •') || summaryText.includes('\n*')) {
+      const points = summaryText.split(/\n[-•*]\s*/).filter(point => point.trim().length > 0);
+      return (
+        <div className="space-y-4">
+          {points.map((point, index) => (
+            <div key={index} className="flex items-start gap-3">
+              <div className="w-2 h-2 bg-indigo-400 rounded-full mt-3 flex-shrink-0"></div>
+              <p className="text-gray-200 text-lg leading-relaxed font-medium">
+                {point.trim()}
+              </p>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Split long paragraphs into sentences for better readability
+    const sentences = summaryText.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+    if (sentences.length > 3) {
+      return (
+        <div className="space-y-3">
+          {sentences.map((sentence, index) => (
+            <p key={index} className="text-gray-200 text-lg leading-relaxed font-medium">
+              {sentence.trim()}
+            </p>
+          ))}
+        </div>
+      );
+    }
+
+    // Fallback: single paragraph
+    return (
+      <p className="text-gray-200 text-lg leading-relaxed font-medium">
+        {summaryText}
+      </p>
+    );
+  };
+
   useEffect(() => {
     const query = sessionStorage.getItem('search_query');
     const redditData = sessionStorage.getItem('reddit_data');
@@ -348,16 +448,16 @@ export default function AnalysisPage() {
                   </span>
                 </h3>
                 
-                {/* AI Generated Paragraph */}
+                {/* AI Generated Summary with Bullet Point Formatting */}
                 <div className="bg-indigo-500/10 rounded-xl p-6 border border-indigo-500/20">
                   <div className="flex items-start gap-4">
                     <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-lg flex items-center justify-center flex-shrink-0 mt-1">
                       ✨
                     </div>
-                    <div>
-                      <p className="text-gray-200 text-lg leading-relaxed font-medium">
-                        {sentimentData.aiParagraphSummary?.paragraph_summary || 'AI summary not available'}
-                      </p>
+                    <div className="flex-1">
+                      {/* Use the utility function to format AI summary */}
+                      {formatAISummary(sentimentData.aiParagraphSummary?.paragraph_summary || 'AI summary not available')}
+                      
                       <div className="mt-4 flex items-center gap-4 text-sm text-indigo-300">
                         <span>🕒 Generated: {sentimentData.aiParagraphSummary?.generated_at ? new Date(sentimentData.aiParagraphSummary.generated_at).toLocaleString() : 'Unknown'}</span>
                         <span>🎯 Confidence: {sentimentData.aiParagraphSummary?.confidence_level || 'unknown'}</span>

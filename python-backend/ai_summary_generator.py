@@ -19,21 +19,22 @@ except ImportError:
 # Load environment variables
 load_dotenv()
 
+
 class AISummaryGenerator:
     def __init__(self):
         """Initialize Gemini 2.5 Flash with multiple API keys for scaling"""
         print("🚀 Loading Multi-Account Gemini AI Summary Generator...")
-        
+
         if not GEMINI_AVAILABLE:
             raise ImportError("❌ Google Generative AI package not installed! Run: pip install google-generativeai")
-        
+
         # Load multiple Gemini API keys
         self.api_keys = self._load_gemini_keys()
         if not self.api_keys:
             raise ValueError("❌ No valid GEMINI_API_KEY found! Add at least GEMINI_API_KEY_1 to .env file.")
-        
+
         print(f"🔑 Loaded {len(self.api_keys)} Gemini API key(s)")
-        
+
         # Initialize models for each API key
         self.models = []
         for i, api_key in enumerate(self.api_keys, 1):
@@ -44,23 +45,23 @@ class AISummaryGenerator:
                 print(f"⚡ Account {i}: Gemini 2.5 Flash ready!")
             except Exception as e:
                 print(f"⚠️ Account {i}: Failed to initialize - {e}")
-        
+
         if not self.models:
             raise ValueError("❌ No Gemini models could be initialized!")
-        
+
         self.current_model_index = 0
         print(f"✅ Multi-Account Gemini Generator ready with {len(self.models)} active account(s)!")
-    
+
     def _load_gemini_keys(self):
         """Load all available Gemini API keys from environment"""
         keys = []
-        
-        # Check for single key first (backward compatibility)
+
+        # Single key (backward compatible)
         single_key = os.getenv('GEMINI_API_KEY')
         if single_key and single_key != 'your_gemini_api_key_here':
             keys.append(single_key)
-        
-        # Load numbered keys
+
+        # Numbered keys (GEMINI_API_KEY_1, _2, ...)
         idx = 1
         while True:
             key = os.getenv(f'GEMINI_API_KEY_{idx}')
@@ -68,62 +69,61 @@ class AISummaryGenerator:
                 break
             keys.append(key)
             idx += 1
-        
+
         return keys
-    
+
     def _get_next_model(self):
         """Get next model with rotation for load balancing"""
         if not self.models:
             raise ValueError("No active Gemini models available")
-        
+
         model_info = self.models[self.current_model_index]
         self.current_model_index = (self.current_model_index + 1) % len(self.models)
-        
         return model_info
 
+    # ================================================================
+    # 🔹 MAIN SUMMARY GENERATION
+    # ================================================================
     def generate_paragraph_summary(self, sentiment_data, query):
         """Generate pure Gemini-powered intelligent summary"""
         print(f"⚡ Gemini 2.5 Flash analyzing sentiment data for: {query}")
-        
-        # Extract data from sentiment analysis
+
+        # Extract metadata
         metadata = sentiment_data.get('metadata', {})
         total_comments = metadata.get('total_comments_analyzed', 0)
         sentiment_breakdown = metadata.get('sentiment_breakdown', {})
         overall_sentiment = metadata.get('overall_sentiment', 'neutral')
         confidence = metadata.get('confidence', 0)
         raw_counts = metadata.get('raw_counts', {})
-        
-        # Get actual comment samples
+
+        # Comment samples
         summary_data = sentiment_data.get('summary', {})
         top_positive_comments = summary_data.get('top_positive_comments', [])[:5]
         top_negative_comments = summary_data.get('top_negative_comments', [])[:5]
-        
-        # Extract key insights from comments
+
+        # Extract insights
         comment_insights = self._extract_insights(top_positive_comments, top_negative_comments, query)
-        
-        # Create powerful Gemini prompt
+
+        # Create the Gemini prompt
         prompt = self._create_gemini_prompt(
             query, total_comments, sentiment_breakdown, raw_counts,
-            overall_sentiment, confidence, comment_insights, 
+            overall_sentiment, confidence, comment_insights,
             top_positive_comments, top_negative_comments
         )
-        
-        # Generate with Gemini 2.5 Flash (with multi-account rotation)
+
         print("🔥 Gemini 2.5 Flash generating intelligent summary...")
-        
-        # Try each model until one succeeds
+
+        # Rotate accounts until success
         last_error = None
+        summary = ""
         for attempt in range(len(self.models)):
             try:
                 model_info = self._get_next_model()
                 print(f"🎯 Using Gemini Account {model_info['account']}")
-                
                 response = model_info['model'].generate_content(prompt)
                 summary = response.text.strip()
-                
                 print(f"✅ Generated by Account {model_info['account']}")
                 break
-                
             except Exception as e:
                 last_error = e
                 print(f"⚠️ Account {model_info['account']} failed: {e}")
@@ -131,12 +131,11 @@ class AISummaryGenerator:
                     print(f"🔄 Trying next account...")
                 continue
         else:
-            # All models failed
             raise Exception(f"All Gemini accounts failed. Last error: {last_error}")
-        
+
         # Clean and enhance
         summary = self._clean_summary(summary)
-        
+
         return {
             'paragraph_summary': summary,
             'generated_at': datetime.now().isoformat(),
@@ -147,6 +146,9 @@ class AISummaryGenerator:
             'key_insights': comment_insights
         }
 
+    # ================================================================
+    # 🔹 INSIGHT EXTRACTION
+    # ================================================================
     def _extract_insights(self, positive_comments, negative_comments, query):
         """Extract key insights from actual comments - no BS analysis"""
         insights = {
@@ -156,86 +158,75 @@ class AISummaryGenerator:
             'key_features_mentioned': [],
             'user_concerns': []
         }
-        
-        # Enhanced keyword analysis
+
         positive_keywords = {
             'satisfaction': ['love', 'amazing', 'great', 'excellent', 'perfect', 'awesome', 'fantastic', 'wonderful'],
-            'design': ['beautiful', 'gorgeous', 'sleek', 'elegant', 'stunning', 'attractive'],
+            'design': ['beautiful', 'sleek', 'elegant', 'stunning', 'attractive'],
             'performance': ['fast', 'smooth', 'quick', 'responsive', 'powerful', 'snappy'],
-            'value': ['worth', 'good deal', 'reasonable', 'affordable', 'value']
+            'value': ['worth', 'affordable', 'value', 'good deal']
         }
-        
+
         feature_keywords = {
-            'camera': ['camera', 'photo', 'picture', 'photography', 'lens', 'zoom', 'portrait'],
+            'camera': ['camera', 'photo', 'picture', 'lens', 'zoom', 'portrait'],
             'battery': ['battery', 'charge', 'charging', 'power', 'lasting'],
             'display': ['display', 'screen', 'brightness', 'color', 'resolution'],
             'performance': ['speed', 'performance', 'processor', 'ram', 'storage', 'gaming'],
             'design': ['design', 'build', 'quality', 'premium', 'materials', 'color']
         }
-        
+
         concern_keywords = {
-            'pricing': ['expensive', 'price', 'cost', 'money', 'overpriced', 'cheap'],
-            'battery': ['battery drain', 'battery life', 'charging slow', 'power'],
-            'software': ['bug', 'issue', 'problem', 'glitch', 'lag', 'crash', 'freeze'],
-            'heating': ['heat', 'warm', 'hot', 'overheating', 'temperature'],
-            'camera': ['camera blur', 'photo quality', 'focus', 'night mode'],
-            'build': ['fragile', 'scratch', 'break', 'durability', 'quality']
+            'pricing': ['expensive', 'price', 'cost', 'overpriced', 'cheap'],
+            'battery': ['battery drain', 'battery life', 'charging slow'],
+            'software': ['bug', 'issue', 'problem', 'lag', 'crash'],
+            'heating': ['heat', 'warm', 'hot', 'overheating'],
+            'camera': ['blur', 'photo quality', 'focus', 'night mode'],
+            'build': ['fragile', 'scratch', 'break', 'durability']
         }
-        
-        # Analyze positive comments
+
         for comment in positive_comments:
             text = comment.get('text', '').lower()
             if text:
-                # Check positive themes
-                for theme, keywords in positive_keywords.items():
-                    if any(word in text for word in keywords):
+                for theme, words in positive_keywords.items():
+                    if any(w in text for w in words):
                         insights['positive_themes'].append(theme)
-                
-                # Check features mentioned
-                for feature, keywords in feature_keywords.items():
-                    if any(word in text for word in keywords):
+                for feature, words in feature_keywords.items():
+                    if any(w in text for w in words):
                         insights['key_features_mentioned'].append(feature)
-        
-        # Analyze negative comments
+
         for comment in negative_comments:
             text = comment.get('text', '').lower()
             if text:
-                # Check concerns
-                for concern, keywords in concern_keywords.items():
-                    if any(word in text for word in keywords):
+                for concern, words in concern_keywords.items():
+                    if any(w in text for w in words):
                         insights['user_concerns'].append(concern)
-                
-                # Also check features mentioned in negative context
-                for feature, keywords in feature_keywords.items():
-                    if any(word in text for word in keywords):
+                for feature, words in feature_keywords.items():
+                    if any(w in text for w in words):
                         insights['key_features_mentioned'].append(feature)
-        
-        # Remove duplicates and limit results
+
         for key in insights:
-            insights[key] = list(set(insights[key]))[:5]  # Limit to top 5 per category
-        
+            insights[key] = list(set(insights[key]))[:5]
         return insights
 
-    def _create_gemini_prompt(self, query, total_comments, sentiment_breakdown, raw_counts, overall_sentiment, confidence, comment_insights, positive_comments, negative_comments):
-        """Create a powerful Gemini prompt with real comment data"""
-        
+    # ================================================================
+    # 🔹 PROMPT GENERATION (UPDATED FOR 7–8 POINT STRUCTURED OUTPUT)
+    # ================================================================
+    def _create_gemini_prompt(self, query, total_comments, sentiment_breakdown, raw_counts,
+                              overall_sentiment, confidence, comment_insights,
+                              positive_comments, negative_comments):
+        """Create a powerful Gemini prompt with structured summary requirement"""
+
         pos_pct = sentiment_breakdown.get('positive', 0)
         neg_pct = sentiment_breakdown.get('negative', 0)
         neu_pct = sentiment_breakdown.get('neutral', 0)
-        
+
         pos_count = raw_counts.get('positive', 0)
         neg_count = raw_counts.get('negative', 0)
         neu_count = raw_counts.get('neutral', 0)
-        
-        # Include actual comment samples for context
-        sample_positive = ""
-        if positive_comments:
-            sample_positive = "\n".join([f"- \"{comment.get('text', '')[:150]}...\"" for comment in positive_comments[:3]])
-        
-        sample_negative = ""
-        if negative_comments:
-            sample_negative = "\n".join([f"- \"{comment.get('text', '')[:150]}...\"" for comment in negative_comments[:3]])
-        
+
+        # Sample comments for context
+        sample_positive = "\n".join([f"- \"{c.get('text', '')[:150]}...\"" for c in positive_comments[:3]]) if positive_comments else ""
+        sample_negative = "\n".join([f"- \"{c.get('text', '')[:150]}...\"" for c in negative_comments[:3]]) if negative_comments else ""
+
         prompt = f"""Analyze this Reddit sentiment data about "{query}" and create an intelligent summary.
 
 DATA:
@@ -243,9 +234,9 @@ DATA:
 - Sentiment: {pos_count} positive ({pos_pct:.1f}%), {neg_count} negative ({neg_pct:.1f}%), {neu_count} neutral ({neu_pct:.1f}%)
 - Overall: {overall_sentiment} ({confidence:.1f}% confidence)
 
-POSITIVE THEMES: {', '.join(comment_insights['positive_themes']) if comment_insights['positive_themes'] else 'None'}
-KEY FEATURES: {', '.join(comment_insights['key_features_mentioned']) if comment_insights['key_features_mentioned'] else 'None'}
-USER CONCERNS: {', '.join(comment_insights['user_concerns']) if comment_insights['user_concerns'] else 'None'}
+POSITIVE THEMES: {', '.join(comment_insights['positive_themes']) or 'None'}
+KEY FEATURES: {', '.join(comment_insights['key_features_mentioned']) or 'None'}
+USER CONCERNS: {', '.join(comment_insights['user_concerns']) or 'None'}
 
 SAMPLE POSITIVE COMMENTS:
 {sample_positive}
@@ -253,54 +244,55 @@ SAMPLE POSITIVE COMMENTS:
 SAMPLE NEGATIVE COMMENTS:
 {sample_negative}
 
-Create a point-wise,detailed and  intelligent summary that captures the community's opinion about {query}. Be specific, data-driven, and insightful. No fluff."""
-        
+Now write a **7–8 point structured summary** that captures the community's opinions about {query}.  
+Each point should be **1–2 sentences**, factual, and based on observed comment patterns or sentiments.  
+Avoid generic statements. Use the following format:
+
+1. <Main insight or community consensus>
+2. <Another significant observation>
+3. <Continue until 7–8 bullet points>
+"""
         return prompt
 
+    # ================================================================
+    # 🔹 CLEANING FUNCTION (PRESERVE BULLETS)
+    # ================================================================
     def _clean_summary(self, summary):
-        """Clean Gemini's response - remove fluff, keep power"""
-        
-        # Remove markdown and formatting
+        """Clean Gemini's response but preserve bullet structure"""
         cleaned = summary.replace("**", "").replace("*", "").replace("#", "").strip()
-        
-        # Remove meta-commentary
         lines = [line.strip() for line in cleaned.split('\n') if line.strip()]
-        content_lines = []
-        
+        # Keep numbered lines intact
+        formatted = []
         for line in lines:
-            # Skip instruction echoes
-            if not any(skip in line.lower() for skip in ['summary:', 'analysis:', 'based on', 'in conclusion']):
-                content_lines.append(line)
-        
-        # Join and finalize
-        summary = ' '.join(content_lines)
-        
-        # Ensure proper ending
-        if summary and not summary.endswith('.'):
-            summary += '.'
-        
-        return summary
+            if line[0].isdigit() and '.' in line[:3]:
+                formatted.append(line)
+            elif formatted:
+                # continuation of previous bullet
+                formatted[-1] += ' ' + line
+            else:
+                formatted.append(line)
+        return "\n".join(formatted)
 
 
-
+# ================================================================
+# 🔹 TEST FUNCTION
+# ================================================================
 def test_gemini_power():
     """Test pure Gemini 2.5 Flash power"""
     generator = AISummaryGenerator()
-    
-    # Load real sentiment data
+
     with open('pre-process/sentiment_samsung_s24_1761241395.json', 'r', encoding='utf-8') as f:
         sentiment_data = json.load(f)
-    
+
     print("🔥 Testing Gemini 2.5 Flash with Samsung S24 data...")
     result = generator.generate_paragraph_summary(sentiment_data, "Samsung S24")
-    
-    print(f"\n⚡ GEMINI 2.5 FLASH SUMMARY:")
-    print(result['paragraph_summary'])
+
+    print(f"\n⚡ GEMINI 2.5 FLASH SUMMARY:\n{result['paragraph_summary']}")
     print(f"\n🚀 Model: {result['model_used']}")
     print(f"🎯 Confidence: {result['confidence_level']}")
     print(f"📊 Method: {result['analysis_method']}")
-    print(f"� Com ments Analyzed: {result['comments_analyzed']}")
-    
+    print(f"💬 Comments Analyzed: {result['comments_analyzed']}")
+
     insights = result['key_insights']
     print(f"\n🔍 EXTRACTED INSIGHTS:")
     if insights['positive_themes']:
@@ -309,6 +301,7 @@ def test_gemini_power():
         print(f"   🎯 Features: {', '.join(insights['key_features_mentioned'])}")
     if insights['user_concerns']:
         print(f"   ⚠️ Concerns: {', '.join(insights['user_concerns'])}")
+
 
 if __name__ == "__main__":
     test_gemini_power()
