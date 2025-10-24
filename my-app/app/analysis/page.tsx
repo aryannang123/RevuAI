@@ -2,20 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import SentimentCharts from "../../components/SentimentCharts";
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, RadarChart, PolarGrid, 
-  PolarAngleAxis, PolarRadiusAxis, Radar, Treemap, ComposedChart 
-} from 'recharts';
-import { Brain, TrendingUp, TrendingDown, Minus, MessageSquare, ArrowLeft, Download, Share2, Sparkles, BarChart3, PieChart as PieIcon, Activity } from 'lucide-react';
+
+import { Brain, TrendingUp, TrendingDown, Minus, MessageSquare, ArrowLeft, Download, Share2, Sparkles } from 'lucide-react';
+
 
 export default function AnalysisPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [sentimentData, setSentimentData] = useState<any>(null);
   const [animatedStats, setAnimatedStats] = useState({ positive: 0, negative: 0, neutral: 0 });
-  const [activeChart, setActiveChart] = useState('overview');
+
 
   // Utility function to format AI summary text
   const formatAISummary = (summaryText: string) => {
@@ -181,89 +177,9 @@ export default function AnalysisPage() {
     );
   }
 
-  const COLORS = {
-    positive: '#10b981',
-    negative: '#ef4444',
-    neutral: '#f59e0b',
-    cyan: '#06b6d4',
-    purple: '#a855f7',
-    pink: '#ec4899'
-  };
 
-  const pieData = [
-    { name: 'Positive', value: sentimentData.rawCounts.positive, color: COLORS.positive, percentage: sentimentData.sentiments.positive },
-    { name: 'Negative', value: sentimentData.rawCounts.negative, color: COLORS.negative, percentage: sentimentData.sentiments.negative },
-    { name: 'Neutral', value: sentimentData.rawCounts.neutral, color: COLORS.neutral, percentage: sentimentData.sentiments.neutral }
-  ];
 
-  const barData = [
-    { name: 'Positive', count: sentimentData.rawCounts.positive, fill: COLORS.positive },
-    { name: 'Negative', count: sentimentData.rawCounts.negative, fill: COLORS.negative },
-    { name: 'Neutral', count: sentimentData.rawCounts.neutral, fill: COLORS.neutral }
-  ];
 
-  const timeSeriesData = [
-    { time: 'Start', positive: sentimentData.sentiments.positive * 0.5, negative: sentimentData.sentiments.negative * 0.6, neutral: sentimentData.sentiments.neutral * 0.7 },
-    { time: '25%', positive: sentimentData.sentiments.positive * 0.7, negative: sentimentData.sentiments.negative * 0.8, neutral: sentimentData.sentiments.neutral * 0.85 },
-    { time: '50%', positive: sentimentData.sentiments.positive * 0.85, negative: sentimentData.sentiments.negative * 0.9, neutral: sentimentData.sentiments.neutral * 0.92 },
-    { time: '75%', positive: sentimentData.sentiments.positive * 0.95, negative: sentimentData.sentiments.negative * 0.95, neutral: sentimentData.sentiments.neutral * 0.97 },
-    { time: 'End', positive: sentimentData.sentiments.positive, negative: sentimentData.sentiments.negative, neutral: sentimentData.sentiments.neutral }
-  ];
-
-  const radarData = [
-    { subject: 'Positive', value: sentimentData.sentiments.positive, fullMark: 100 },
-    { subject: 'Negative', value: sentimentData.sentiments.negative, fullMark: 100 },
-    { subject: 'Neutral', value: sentimentData.sentiments.neutral, fullMark: 100 }
-  ];
-
-  const confidenceData = sentimentData.allComments.length > 0 
-    ? [
-        { range: '90-100%', count: sentimentData.allComments.filter((c: any) => (c.confidence || 0) >= 0.9).length },
-        { range: '80-90%', count: sentimentData.allComments.filter((c: any) => (c.confidence || 0) >= 0.8 && c.confidence < 0.9).length },
-        { range: '70-80%', count: sentimentData.allComments.filter((c: any) => (c.confidence || 0) >= 0.7 && c.confidence < 0.8).length },
-        { range: '60-70%', count: sentimentData.allComments.filter((c: any) => (c.confidence || 0) >= 0.6 && c.confidence < 0.7).length }
-      ]
-    : [
-        { range: '90-100%', count: Math.floor(sentimentData.totalComments * 0.45) },
-        { range: '80-90%', count: Math.floor(sentimentData.totalComments * 0.30) },
-        { range: '70-80%', count: Math.floor(sentimentData.totalComments * 0.18) },
-        { range: '60-70%', count: Math.floor(sentimentData.totalComments * 0.07) }
-      ];
-
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-gray-900/95 border-2 border-cyan-400/50 rounded-xl p-4 backdrop-blur-lg shadow-2xl shadow-cyan-500/20">
-          <p className="text-cyan-400 font-bold text-lg mb-1">{payload[0].name}</p>
-          <p className="text-white text-xl font-semibold">{payload[0].value}</p>
-          {payload[0].payload.percentage && (
-            <p className="text-gray-400 text-sm mt-1">{payload[0].payload.percentage.toFixed(1)}%</p>
-          )}
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const CustomPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }: any) => {
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-    return (
-      <text 
-        x={x} 
-        y={y} 
-        fill="white" 
-        textAnchor={x > cx ? 'start' : 'end'} 
-        dominantBaseline="central"
-        className="font-bold text-sm"
-      >
-        {`${(percent * 100).toFixed(1)}%`}
-      </text>
-    );
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-purple-950 to-gray-950 text-white">
@@ -400,33 +316,48 @@ export default function AnalysisPage() {
 
             <div className="space-y-4">
               <div className="flex gap-4 justify-between text-center">
-                {pieData.map((item) => (
-                  <div key={item.name} className="flex-1">
-                    <div className={`text-3xl font-bold mb-1 ${
-                      item.name === 'Positive' ? 'text-green-400' :
-                      item.name === 'Negative' ? 'text-red-400' : 'text-yellow-400'
-                    }`}>
-                      {item.percentage.toFixed(1)}%
-                    </div>
-                    <div className="text-gray-400 text-sm font-medium">{item.name}</div>
-                    <div className="text-gray-500 text-xs">({item.value.toLocaleString()} comments)</div>
+                <div className="flex-1">
+                  <div className="text-3xl font-bold mb-1 text-green-400">
+                    {sentimentData.sentiments.positive.toFixed(1)}%
                   </div>
-                ))}
+                  <div className="text-gray-400 text-sm font-medium">Positive</div>
+                  <div className="text-gray-500 text-xs">({sentimentData.rawCounts.positive.toLocaleString()} comments)</div>
+                </div>
+                <div className="flex-1">
+                  <div className="text-3xl font-bold mb-1 text-red-400">
+                    {sentimentData.sentiments.negative.toFixed(1)}%
+                  </div>
+                  <div className="text-gray-400 text-sm font-medium">Negative</div>
+                  <div className="text-gray-500 text-xs">({sentimentData.rawCounts.negative.toLocaleString()} comments)</div>
+                </div>
+                <div className="flex-1">
+                  <div className="text-3xl font-bold mb-1 text-yellow-400">
+                    {sentimentData.sentiments.neutral.toFixed(1)}%
+                  </div>
+                  <div className="text-gray-400 text-sm font-medium">Neutral</div>
+                  <div className="text-gray-500 text-xs">({sentimentData.rawCounts.neutral.toLocaleString()} comments)</div>
+                </div>
               </div>
 
               <div className="h-6 w-full bg-gray-800/50 rounded-full overflow-hidden flex shadow-inner">
-                {pieData.map((item) => (
-                  <div
-                    key={item.name}
-                    className="transition-all duration-1000 ease-out flex items-center justify-center text-white font-bold text-sm"
-                    style={{ 
-                      width: `${item.percentage}%`,
-                      background: `linear-gradient(90deg, ${item.color}, ${item.color}dd)`
-                    }}
-                  >
-                    {item.percentage > 15 && `${item.percentage.toFixed(0)}%`}
-                  </div>
-                ))}
+                <div
+                  className="transition-all duration-1000 ease-out flex items-center justify-center text-white font-bold text-sm bg-gradient-to-r from-green-600 to-green-500"
+                  style={{ width: `${sentimentData.sentiments.positive}%` }}
+                >
+                  {sentimentData.sentiments.positive > 15 && `${sentimentData.sentiments.positive.toFixed(0)}%`}
+                </div>
+                <div
+                  className="transition-all duration-1000 ease-out flex items-center justify-center text-white font-bold text-sm bg-gradient-to-r from-red-600 to-red-500"
+                  style={{ width: `${sentimentData.sentiments.negative}%` }}
+                >
+                  {sentimentData.sentiments.negative > 15 && `${sentimentData.sentiments.negative.toFixed(0)}%`}
+                </div>
+                <div
+                  className="transition-all duration-1000 ease-out flex items-center justify-center text-white font-bold text-sm bg-gradient-to-r from-yellow-600 to-yellow-500"
+                  style={{ width: `${sentimentData.sentiments.neutral}%` }}
+                >
+                  {sentimentData.sentiments.neutral > 15 && `${sentimentData.sentiments.neutral.toFixed(0)}%`}
+                </div>
               </div>
             </div>
           </div>
@@ -524,30 +455,7 @@ export default function AnalysisPage() {
             </div>
           )}
 
-          {/* Chart Navigation */}
-          <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
-            {[
-              { id: 'overview', icon: PieIcon, label: 'Overview' },
-              { id: 'distribution', icon: BarChart3, label: 'Distribution' },
-              { id: 'trends', icon: Activity, label: 'Trends' },
-              { id: 'confidence', icon: Sparkles, label: 'Confidence' }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveChart(tab.id)}
-                className={`px-6 py-3 rounded-xl font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
-                  activeChart === tab.id
-                    ? 'bg-gradient-to-r from-cyan-500 to-purple-600 text-white shadow-lg scale-105'
-                    : 'bg-gray-800/50 text-gray-400 hover:bg-gray-800 hover:text-white'
-                }`}
-              >
-                <tab.icon className="w-5 h-5" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
 
-          <SentimentCharts sentimentData={sentimentData} />
 
 
           {/* Top Comments */}
