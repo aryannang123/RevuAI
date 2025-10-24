@@ -31,17 +31,23 @@ export default function AnalysisPage() {
     fetch(`${process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:5000'}/api/sentiment/get-analysis/${encodeURIComponent(query)}`)
       .then(res => res.json())
       .then(sentimentResult => {
+        // Handle both old and new data structures
+        const metadata = sentimentResult.metadata || sentimentResult;
+        const summary = sentimentResult.summary || {};
+        
         setSentimentData({
           query,
-          totalComments: sentimentResult.total_comments_analyzed || 0,
-          analyzedAt: new Date(sentimentResult.analyzed_at).toLocaleDateString(),
-          sentiments: sentimentResult.sentiment_breakdown || { positive: 0, negative: 0, neutral: 0 },
-          rawCounts: sentimentResult.raw_counts || { positive: 0, negative: 0, neutral: 0 },
-          topPositive: sentimentResult.top_comments?.most_positive,
-          topNegative: sentimentResult.top_comments?.most_negative,
-          allComments: sentimentResult.all_comments || [],
-          overallSentiment: sentimentResult.overall_sentiment,
-          confidence: sentimentResult.confidence
+          totalComments: metadata.total_comments_analyzed || 0,
+          analyzedAt: new Date(metadata.analyzed_at).toLocaleDateString(),
+          sentiments: metadata.sentiment_breakdown || { positive: 0, negative: 0, neutral: 0 },
+          rawCounts: metadata.raw_counts || { positive: 0, negative: 0, neutral: 0 },
+          topPositive: summary.top_positive_comments?.[0] || sentimentResult.top_comments?.most_positive,
+          topNegative: summary.top_negative_comments?.[0] || sentimentResult.top_comments?.most_negative,
+          allComments: sentimentResult.comments || sentimentResult.all_comments || [],
+          overallSentiment: metadata.overall_sentiment,
+          confidence: metadata.confidence,
+          aiSummary: sentimentResult.ai_summary || null,
+          aiParagraphSummary: sentimentResult.ai_paragraph_summary || null
         });
         setLoading(false);
       })
@@ -63,7 +69,7 @@ export default function AnalysisPage() {
     return () => clearInterval(timer);
   }, [sentimentData]);
 
-  if (loading || !sentimentData) {
+  if (loading || !sentimentData || !sentimentData.sentiments || !sentimentData.rawCounts || !sentimentData.overallSentiment) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-950 via-purple-950 to-gray-950 flex items-center justify-center">
         <div className="text-center">
@@ -287,7 +293,7 @@ export default function AnalysisPage() {
                   sentimentData.overallSentiment === 'negative' ? 'text-red-400' :
                   'text-yellow-400'
                 }`}>
-                  {sentimentData.overallSentiment.toUpperCase()} ({sentimentData.confidence.toFixed(1)}%)
+                  {sentimentData.overallSentiment?.toUpperCase() || 'UNKNOWN'} ({(sentimentData.confidence || 0).toFixed(1)}%)
                 </span>
               </div>
             </div>
@@ -324,6 +330,99 @@ export default function AnalysisPage() {
               </div>
             </div>
           </div>
+
+          {/* AI Paragraph Summary Section */}
+          {sentimentData.aiParagraphSummary && (
+            <div className="mb-8">
+              <div className="bg-gradient-to-br from-indigo-900/90 to-purple-900/90 backdrop-blur-xl rounded-2xl p-6 border-2 border-indigo-500/30 hover:border-indigo-500/50 transition-all">
+                <h3 className="text-2xl font-bold mb-4 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    🤖
+                  </div>
+                  AI Analysis Summary
+                  <span className="text-sm bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full">
+                    {sentimentData.aiParagraphSummary?.confidence_level || 'unknown'} confidence
+                  </span>
+                  <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full">
+                    {sentimentData.aiParagraphSummary?.model_used || 'unknown'}
+                  </span>
+                </h3>
+                
+                {/* AI Generated Paragraph */}
+                <div className="bg-indigo-500/10 rounded-xl p-6 border border-indigo-500/20">
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-lg flex items-center justify-center flex-shrink-0 mt-1">
+                      ✨
+                    </div>
+                    <div>
+                      <p className="text-gray-200 text-lg leading-relaxed font-medium">
+                        {sentimentData.aiParagraphSummary?.paragraph_summary || 'AI summary not available'}
+                      </p>
+                      <div className="mt-4 flex items-center gap-4 text-sm text-indigo-300">
+                        <span>🕒 Generated: {sentimentData.aiParagraphSummary?.generated_at ? new Date(sentimentData.aiParagraphSummary.generated_at).toLocaleString() : 'Unknown'}</span>
+                        <span>🎯 Confidence: {sentimentData.aiParagraphSummary?.confidence_level || 'unknown'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* AI Summary Section */}
+          {sentimentData.aiSummary && (
+            <div className="mb-8">
+              <div className="bg-gradient-to-br from-purple-900/90 to-indigo-900/90 backdrop-blur-xl rounded-2xl p-6 border-2 border-purple-500/30 hover:border-purple-500/50 transition-all">
+                <h3 className="text-2xl font-bold mb-4 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                    🧠
+                  </div>
+                  AI-Powered Analysis Summary
+                  <span className="text-sm bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full">
+                    {sentimentData.aiSummary?.analysis_confidence || 'unknown'} confidence
+                  </span>
+                </h3>
+                
+                {/* AI Summary Text */}
+                <div className="bg-purple-500/10 rounded-xl p-4 mb-4 border border-purple-500/20">
+                  <p className="text-gray-200 text-lg leading-relaxed">
+                    {sentimentData.aiSummary?.summary || 'AI summary not available'}
+                  </p>
+                </div>
+
+                {/* Key Insights */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <h4 className="text-lg font-semibold text-purple-300 mb-3 flex items-center gap-2">
+                      💡 Key Insights
+                    </h4>
+                    <ul className="space-y-2">
+                      {sentimentData.aiSummary?.key_insights?.map((insight: string, index: number) => (
+                        <li key={index} className="flex items-start gap-2 text-gray-300">
+                          <span className="text-purple-400 mt-1">•</span>
+                          <span className="text-sm">{insight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h4 className="text-lg font-semibold text-indigo-300 mb-3 flex items-center gap-2">
+                      🎯 Recommendations
+                    </h4>
+                    <ul className="space-y-2">
+                      {sentimentData.aiSummary?.recommendations?.map((rec: string, index: number) => (
+                        <li key={index} className="flex items-start gap-2 text-gray-300">
+                          <span className="text-indigo-400 mt-1">•</span>
+                          <span className="text-sm">{rec}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Chart Navigation */}
           <div className="flex gap-3 mb-6 overflow-x-auto pb-2">
@@ -363,19 +462,19 @@ export default function AnalysisPage() {
                     <span className="text-red-300 font-bold text-lg">Most Negative Comment</span>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-red-400/70 text-xs font-semibold px-3 py-1 bg-red-500/20 rounded-full">
-                        {((sentimentData.topNegative.confidence || 0) * 100).toFixed(1)}% confidence
+                        {((sentimentData.topNegative?.confidence || 0) * 100).toFixed(1)}% confidence
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20 mb-3">
                   <p className="text-gray-200 text-sm leading-relaxed italic">
-                    "{sentimentData.topNegative.text}"
+                    "{sentimentData.topNegative?.text || 'No negative comment available'}"
                   </p>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-red-300/70">Reddit Score: {sentimentData.topNegative.score || 'N/A'}</span>
-                  <span className="text-red-300/70">Compound: {sentimentData.topNegative.compound?.toFixed(2) || 'N/A'}</span>
+                  <span className="text-red-300/70">Reddit Score: {sentimentData.topNegative?.score || 'N/A'}</span>
+                  <span className="text-red-300/70">Compound: {sentimentData.topNegative?.compound?.toFixed(2) || 'N/A'}</span>
                 </div>
               </div>
             )}
@@ -390,19 +489,19 @@ export default function AnalysisPage() {
                     <span className="text-green-300 font-bold text-lg">Most Positive Comment</span>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-green-400/70 text-xs font-semibold px-3 py-1 bg-green-500/20 rounded-full">
-                        {((sentimentData.topPositive.confidence || 0) * 100).toFixed(1)}% confidence
+                        {((sentimentData.topPositive?.confidence || 0) * 100).toFixed(1)}% confidence
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="bg-green-500/10 rounded-xl p-4 border border-green-500/20 mb-3">
                   <p className="text-gray-200 text-sm leading-relaxed italic">
-                    "{sentimentData.topPositive.text}"
+                    "{sentimentData.topPositive?.text || 'No positive comment available'}"
                   </p>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-green-300/70">Reddit Score: {sentimentData.topPositive.score || 'N/A'}</span>
-                  <span className="text-green-300/70">Compound: {sentimentData.topPositive.compound?.toFixed(2) || 'N/A'}</span>
+                  <span className="text-green-300/70">Reddit Score: {sentimentData.topPositive?.score || 'N/A'}</span>
+                  <span className="text-green-300/70">Compound: {sentimentData.topPositive?.compound?.toFixed(2) || 'N/A'}</span>
                 </div>
               </div>
             )}
