@@ -1,177 +1,156 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
 import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  PieChart, Pie, Cell, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, LineChart, Line,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from "recharts";
 
-interface SentimentData {
-  sentiment_breakdown: {
-    positive: number;
-    negative: number;
-    neutral: number;
-  };
-  raw_counts: {
-    positive: number;
-    negative: number;
-    neutral: number;
-  };
-  topic_analysis?: {
-    summary: { [key: string]: number };
-    top_topics: [string, number][];
-  };
-}
-
 interface SentimentChartsProps {
-  sentimentData: SentimentData;
+  sentimentData: {
+    sentiments: { positive: number; negative: number; neutral: number };
+    rawCounts: { positive: number; negative: number; neutral: number };
+    allComments?: any[];
+  };
 }
 
 const COLORS = {
-  NEGATIVE: "#ef4444", // red
-  NEUTRAL: "#6366f1",  // indigo
-  POSITIVE: "#22c55e", // green
-  TOPIC: "#facc15",    // yellow
-  GRID: "#374151",
-  AXIS: "#9ca3af",
+  positive: "#10b981",
+  negative: "#ef4444",
+  neutral: "#f59e0b",
+  cyan: "#06b6d4",
+  purple: "#a855f7"
 };
 
-export default function SentimentCharts({ sentimentData }: SentimentChartsProps) {
-  const totalComments =
-    sentimentData.raw_counts.negative +
-    sentimentData.raw_counts.neutral +
-    sentimentData.raw_counts.positive;
+const SentimentCharts: React.FC<SentimentChartsProps> = ({ sentimentData }) => {
+  if (!sentimentData) return null;
+
+  const sentiments = {
+    positive: Number(sentimentData.sentiments.positive) || 0,
+    negative: Number(sentimentData.sentiments.negative) || 0,
+    neutral: Number(sentimentData.sentiments.neutral) || 0
+  };
+
+  const rawCounts = {
+    positive: Number(sentimentData.rawCounts.positive) || 0,
+    negative: Number(sentimentData.rawCounts.negative) || 0,
+    neutral: Number(sentimentData.rawCounts.neutral) || 0
+  };
+
+  const pieData = [
+    { name: "Positive", value: rawCounts.positive, color: COLORS.positive, percentage: sentiments.positive },
+    { name: "Negative", value: rawCounts.negative, color: COLORS.negative, percentage: sentiments.negative },
+    { name: "Neutral", value: rawCounts.neutral, color: COLORS.neutral, percentage: sentiments.neutral }
+  ];
+
+  const barData = [
+    { name: "Positive", count: rawCounts.positive, fill: COLORS.positive },
+    { name: "Negative", count: rawCounts.negative, fill: COLORS.negative },
+    { name: "Neutral", count: rawCounts.neutral, fill: COLORS.neutral }
+  ];
+
+  const radarData = [
+    { subject: "Positive", value: sentiments.positive },
+    { subject: "Negative", value: sentiments.negative },
+    { subject: "Neutral", value: sentiments.neutral }
+  ];
+
+  const confidenceData = sentimentData.allComments?.length
+    ? [
+        { range: "90-100%", count: sentimentData.allComments.filter(c => (c.confidence || 0) >= 0.9).length },
+        { range: "80-90%", count: sentimentData.allComments.filter(c => (c.confidence || 0) >= 0.8 && c.confidence < 0.9).length },
+        { range: "70-80%", count: sentimentData.allComments.filter(c => (c.confidence || 0) >= 0.7 && c.confidence < 0.8).length },
+        { range: "60-70%", count: sentimentData.allComments.filter(c => (c.confidence || 0) >= 0.6 && c.confidence < 0.7).length }
+      ]
+    : [];
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
-      const item = payload[0];
-      const name = item.name;
-      const rawCount = item.payload.rawCount || item.value;
-      const percentage = ((rawCount / totalComments) * 100).toFixed(1);
-
+      const p = payload[0];
       return (
-        <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 text-white shadow-xl">
-          <p className="font-semibold text-cyan-400">{name}</p>
-          <p>Count: {rawCount.toLocaleString()}</p>
-          <p>Percentage: {percentage}%</p>
+        <div className="bg-gray-900/90 border border-cyan-400/40 rounded-lg p-3 text-sm text-white">
+          <p className="font-semibold text-cyan-400">{p.name}</p>
+          <p>Count: {p.value}</p>
+          {p.payload.percentage && <p>{p.payload.percentage.toFixed(1)}%</p>}
         </div>
       );
     }
     return null;
   };
 
-  // ✅ Fix: use properly typed data label function
-  const renderLabel = (props: any) => {
-    if (!props || typeof props.percent !== "number") return "";
-    return `${(props.percent * 100).toFixed(0)}%`;
-  };
-
-  const { pieData, barData, topicBarData } = useMemo(() => {
-    const { sentiment_breakdown, raw_counts, topic_analysis } = sentimentData;
-
-    const pieData = [
-      { name: "Negative", value: raw_counts.negative, rawCount: raw_counts.negative, fill: COLORS.NEGATIVE },
-      { name: "Neutral", value: raw_counts.neutral, rawCount: raw_counts.neutral, fill: COLORS.NEUTRAL },
-      { name: "Positive", value: raw_counts.positive, rawCount: raw_counts.positive, fill: COLORS.POSITIVE },
-    ];
-
-    const barData = [
-      { name: "Negative", count: raw_counts.negative, fill: COLORS.NEGATIVE },
-      { name: "Neutral", count: raw_counts.neutral, fill: COLORS.NEUTRAL },
-      { name: "Positive", count: raw_counts.positive, fill: COLORS.POSITIVE },
-    ];
-
-    const topicBarData = topic_analysis?.top_topics
-      ? topic_analysis.top_topics.slice(0, 5).map(([name, count]) => ({
-          name,
-          count,
-          fill: COLORS.TOPIC,
-        }))
-      : null;
-
-    return { pieData, barData, topicBarData };
-  }, [sentimentData]);
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* ==== PIE CHART ==== */}
-      <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 shadow-xl h-96 flex flex-col items-center justify-center">
-        <h3 className="text-lg font-semibold text-cyan-300 mb-4">
-          Sentiment Distribution (%)
-        </h3>
-        <ResponsiveContainer width="100%" height="80%">
-          <PieChart>
-            <Pie
-              data={pieData}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              outerRadius={100}
-              label={renderLabel}
-              labelLine={false}
-              animationDuration={1000}
-            >
-              {pieData.map((entry, index) => (
-                <Cell key={index} fill={entry.fill} stroke="#1e293b" strokeWidth={3} />
-              ))}
-            </Pie>
-            <Tooltip content={<CustomTooltip />} />
-            <Legend iconType="circle" wrapperStyle={{ color: "white" }} />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
+    <div className="bg-gray-900/50 p-8 rounded-2xl border border-cyan-500/20 shadow-xl mt-10">
+      <h2 className="text-3xl font-bold mb-6 text-cyan-300 flex items-center gap-3">
+        Sentiment Overview
+      </h2>
 
-      {/* ==== BAR CHART ==== */}
-      <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 shadow-xl h-96">
-        <h3 className="text-lg font-semibold text-cyan-300 mb-4">
-          Raw Comment Counts
-        </h3>
-        <ResponsiveContainer width="100%" height="80%">
-          <BarChart data={barData}>
-            <CartesianGrid strokeDasharray="3 3" stroke={COLORS.GRID} opacity={0.5} />
-            <XAxis dataKey="name" stroke={COLORS.AXIS} />
-            <YAxis stroke={COLORS.AXIS} allowDecimals={false} />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="count" radius={[6, 6, 0, 0]} animationDuration={1000}>
-              {barData.map((entry, index) => (
-                <Cell key={index} fill={entry.fill} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* ==== TOPIC CHART ==== */}
-      {topicBarData && (
-        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 shadow-xl h-96">
-          <h3 className="text-lg font-semibold text-cyan-300 mb-4">
-            Top 5 Comment Topics
-          </h3>
-          <ResponsiveContainer width="100%" height="80%">
-            <BarChart
-              data={topicBarData}
-              layout="vertical"
-              margin={{ top: 10, right: 10, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke={COLORS.GRID} opacity={0.5} />
-              <XAxis type="number" stroke={COLORS.AXIS} />
-              <YAxis dataKey="name" type="category" stroke={COLORS.AXIS} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Pie Chart */}
+        <div className="bg-gray-800/50 rounded-xl p-6 border border-cyan-500/20">
+          <h3 className="text-xl font-semibold text-cyan-300 mb-4">Sentiment Distribution</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={120} label>
+                {pieData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
               <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="count" fill={COLORS.TOPIC} radius={[0, 6, 6, 0]} animationDuration={1000} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Bar Chart */}
+        <div className="bg-gray-800/50 rounded-xl p-6 border border-purple-500/20">
+          <h3 className="text-xl font-semibold text-purple-300 mb-4">Comment Counts</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={barData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.4} />
+              <XAxis dataKey="name" stroke="#9ca3af" />
+              <YAxis stroke="#9ca3af" />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                {barData.map((entry, index) => (
+                  <Cell key={`bar-${index}`} fill={entry.fill} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
-      )}
+
+        {/* Confidence Distribution */}
+        <div className="bg-gray-800/50 rounded-xl p-6 border border-yellow-500/20 col-span-1 md:col-span-2">
+          <h3 className="text-xl font-semibold text-yellow-300 mb-4">Confidence Distribution</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={confidenceData} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+              <XAxis type="number" stroke="#9ca3af" />
+              <YAxis type="category" dataKey="range" stroke="#9ca3af" width={90} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="count" radius={[0, 10, 10, 0]} fill={COLORS.cyan} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Radar Chart */}
+        <div className="bg-gray-800/50 rounded-xl p-6 border border-green-500/20 col-span-1 md:col-span-2">
+          <h3 className="text-xl font-semibold text-green-300 mb-4">Sentiment Radar</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+              <PolarGrid stroke="#374151" />
+              <PolarAngleAxis dataKey="subject" stroke="#9ca3af" />
+              <PolarRadiusAxis stroke="#9ca3af" />
+              <Radar name="Sentiment" dataKey="value" stroke={COLORS.cyan} fill={COLORS.cyan} fillOpacity={0.6} />
+              <Tooltip content={<CustomTooltip />} />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     </div>
   );
-}
+};
+
+export default SentimentCharts;

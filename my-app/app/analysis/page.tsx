@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import SentimentCharts from "../../components/SentimentCharts";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, RadarChart, PolarGrid, 
@@ -347,155 +348,8 @@ export default function AnalysisPage() {
             ))}
           </div>
 
-          {/* Charts Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            {/* Pie Chart */}
-            {(activeChart === 'overview' || activeChart === 'distribution') && (
-              <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-xl rounded-2xl p-6 border-2 border-cyan-500/30 hover:border-cyan-500/50 transition-all">
-                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                  <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
-                    <PieIcon className="w-6 h-6 text-cyan-400" />
-                  </div>
-                  Sentiment Distribution
-                </h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={CustomPieLabel}
-                      outerRadius={120}
-                      fill="#8884d8"
-                      dataKey="value"
-                      animationBegin={0}
-                      animationDuration={800}
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} stroke={entry.color} strokeWidth={2} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            )}
+          <SentimentCharts sentimentData={sentimentData} />
 
-            {/* Bar Chart */}
-            {(activeChart === 'overview' || activeChart === 'distribution') && (
-              <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-xl rounded-2xl p-6 border-2 border-purple-500/30 hover:border-purple-500/50 transition-all">
-                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
-                    <BarChart3 className="w-6 h-6 text-purple-400" />
-                  </div>
-                  Comment Count
-                </h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={barData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                    <XAxis dataKey="name" stroke="#9ca3af" />
-                    <YAxis stroke="#9ca3af" />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="count" radius={[12, 12, 0, 0]} animationDuration={800}>
-                      {barData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Line Chart - Trends */}
-            {(activeChart === 'overview' || activeChart === 'trends') && (
-              <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-xl rounded-2xl p-6 border-2 border-green-500/30 hover:border-green-500/50 transition-all">
-                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
-                    <Activity className="w-6 h-6 text-green-400" />
-                  </div>
-                  Sentiment Progression
-                </h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={timeSeriesData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                    <XAxis dataKey="time" stroke="#9ca3af" />
-                    <YAxis stroke="#9ca3af" />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ color: '#fff' }} />
-                    <Line type="monotone" dataKey="positive" stroke={COLORS.positive} strokeWidth={3} dot={{ fill: COLORS.positive, r: 6 }} activeDot={{ r: 8 }} />
-                    <Line type="monotone" dataKey="negative" stroke={COLORS.negative} strokeWidth={3} dot={{ fill: COLORS.negative, r: 6 }} activeDot={{ r: 8 }} />
-                    <Line type="monotone" dataKey="neutral" stroke={COLORS.neutral} strokeWidth={3} dot={{ fill: COLORS.neutral, r: 6 }} activeDot={{ r: 8 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Area Chart */}
-            {(activeChart === 'trends') && (
-              <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-xl rounded-2xl p-6 border-2 border-pink-500/30 hover:border-pink-500/50 transition-all">
-                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                  <div className="w-10 h-10 bg-pink-500/20 rounded-lg flex items-center justify-center">
-                    <Activity className="w-6 h-6 text-pink-400" />
-                  </div>
-                  Cumulative Analysis
-                </h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <AreaChart data={timeSeriesData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                    <XAxis dataKey="time" stroke="#9ca3af" />
-                    <YAxis stroke="#9ca3af" />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Area type="monotone" dataKey="positive" stackId="1" stroke={COLORS.positive} fill={COLORS.positive} fillOpacity={0.6} />
-                    <Area type="monotone" dataKey="neutral" stackId="1" stroke={COLORS.neutral} fill={COLORS.neutral} fillOpacity={0.6} />
-                    <Area type="monotone" dataKey="negative" stackId="1" stroke={COLORS.negative} fill={COLORS.negative} fillOpacity={0.6} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Confidence Distribution */}
-            {(activeChart === 'overview' || activeChart === 'confidence') && (
-              <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-xl rounded-2xl p-6 border-2 border-yellow-500/30 hover:border-yellow-500/50 transition-all">
-                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                  <div className="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
-                    <Sparkles className="w-6 h-6 text-yellow-400" />
-                  </div>
-                  Confidence Levels
-                </h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={confidenceData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                    <XAxis type="number" stroke="#9ca3af" />
-                    <YAxis dataKey="range" type="category" stroke="#9ca3af" width={80} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="count" fill={COLORS.cyan} radius={[0, 12, 12, 0]} animationDuration={800} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Radar Chart */}
-            {activeChart === 'confidence' && (
-              <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-xl rounded-2xl p-6 border-2 border-cyan-500/30 hover:border-cyan-500/50 transition-all">
-                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                  <div className="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
-                    <Activity className="w-6 h-6 text-cyan-400" />
-                  </div>
-                  Sentiment Radar
-                </h3>
-                <ResponsiveContainer width="100%" height={350}>
-                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
-                    <PolarGrid stroke="#374151" />
-                    <PolarAngleAxis dataKey="subject" stroke="#9ca3af" />
-                    <PolarRadiusAxis stroke="#9ca3af" />
-                    <Radar name="Sentiment" dataKey="value" stroke={COLORS.cyan} fill={COLORS.cyan} fillOpacity={0.6} />
-                    <Tooltip content={<CustomTooltip />} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
 
           {/* Top Comments */}
           <div className="grid md:grid-cols-2 gap-6 mb-8">

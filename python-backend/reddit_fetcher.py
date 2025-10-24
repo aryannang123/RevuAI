@@ -1,488 +1,455 @@
-# optimized_reddit_fetcher.py
-# ULTRA-FAST Multi-Account Reddit Fetcher
-
-import requests
-import time
+# reddit_fetcher.py  (replace or add into your module)
 import os
-import random
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+import time
 import base64
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import random
 import threading
+import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Dict, Any, Optional
+from datetime import datetime, timedelta
+import math
+
+# === Config: tune these ===
+MAX_REQUESTS_PER_MINUTE_PER_ACCOUNT = int(os.getenv("MAX_REQ_PER_MIN_PER_ACC", "60"))  # safe default ~60 req/min/account
+MIN_REQUEST_INTERVAL = 60.0 / MAX_REQUESTS_PER_MINUTE_PER_ACCOUNT  # seconds between requests per account on avg
+MAX_WORKERS_PER_ACCOUNT = 3   # small multiplier; overall workers = min(len(accounts)*MAX_WORKERS_PER_ACCOUNT, 20)
+GLOBAL_MAX_WORKERS = int(os.getenv("MAX_GLOBAL_WORKERS", "12"))
+
+# helpful UA variants (small rotation)
+DEFAULT_USER_AGENTS = [
+    "RevuAI/2.0 (+https://example.com)",
+    "RevuAI-Fetcher/2.0",
+    "RevuAI-Bot/2.0"
+]
+
+def _now_ts():
+    return time.time()
+
+class TokenBucket:
+    """
+    Simple token-bucket per account.
+    Bucket refills continuously at rate tokens_per_sec, capacity = burst_capacity
+    Call consume(1) to get permission; returns True if allowed.
+    """
+    def __init__(self, tokens_per_minute: float, burst_capacity: int = 3):
+        self.rate = tokens_per_minute / 60.0
+        self.capacity = max(burst_capacity, 1)
+        self._tokens = self.capacity
+        self._last = _now_ts()
+        self.lock = threading.Lock()
+
+    def consume(self, tokens: float = 1.0) -> bool:
+        with self.lock:
+            now = _now_ts()
+            elapsed = now - self._last
+            self._last = now
+            self._tokens = min(self.capacity, self._tokens + elapsed * self.rate)
+            if self._tokens >= tokens:
+                self._tokens -= tokens
+                return True
+            return False
+
+    def wait_for_token(self, timeout: Optional[float] = None) -> bool:
+        """
+        Block until token available or timeout. Returns True if token got consumed.
+        """
+        start = _now_ts()
+        while True:
+            if self.consume():
+                return True
+            if timeout is not None and _now_ts() - start > timeout:
+                return False
+            # sleep a small jittered amount to avoid spin
+            time.sleep(0.05 + random.random() * 0.05)
+
+class AccountSession:
+    def __init__(self, index: int, account_info: Dict[str, str], tokens_per_minute: int):
+        self.index = index
+        self.acc = account_info
+        self.session = requests.Session()
+        # Optionally configure a proxy per-account via REDDIT_PROXY_{index+1}
+        proxy_env = os.getenv(f"REDDIT_PROXY_{index+1}") or os.getenv('REDDIT_PROXY')
+        if proxy_env:
+            self.session.proxies.update({
+                'http': proxy_env,
+                'https': proxy_env
+            })
+        self.token_bucket = TokenBucket(tokens_per_minute, burst_capacity=4)
+        self.lock = threading.Lock()
+        self.access_token = None
+        self.token_expires_at = 0
+        self.user_agent = account_info.get('user_agent') or random.choice(DEFAULT_USER_AGENTS)
+        # small random initial delay to avoid simultaneous auth from many accounts
+        self.next_available = _now_ts() + random.random()*0.5
+        self.rate_limited_until = 0
+
+    def set_user_agent(self, ua: str):
+        self.user_agent = ua
 
 class MultiAccountRedditFetcher:
-    """
-    High-performance Reddit fetcher using multiple accounts
-    Optimized for maximum throughput with safety
-    """
-
     def __init__(self, accounts: List[Dict[str, str]] = None):
-        """Initialize with multiple Reddit accounts"""
+        # load accounts from env if not provided
         if accounts:
             self.accounts = accounts
         else:
-            # Load single account from env
-            self.accounts = [{
-                'client_id': os.getenv('REDDIT_CLIENT_ID'),
-                'client_secret': os.getenv('REDDIT_CLIENT_SECRET'),
-                'username': os.getenv('REDDIT_USERNAME'),
-                'password': os.getenv('REDDIT_PASSWORD')
-            }]
-        
-        # Token cache for each account
-        self.tokens = {}
-        self.token_locks = {i: threading.Lock() for i in range(len(self.accounts))}
-        
-        self.user_agent = 'RevuAI/2.0 by RevuAI Team'
-        
-        # Validate accounts
-        for idx, acc in enumerate(self.accounts):
-            if not all([acc['client_id'], acc['client_secret'], acc['username'], acc['password']]):
-                raise ValueError(f"Account {idx} missing credentials")
-        
-        print(f"✓ Initialized with {len(self.accounts)} account(s)")
+            # same loader as your app.py: look for REDDIT_CLIENT_ID_1 etc.
+            accs = []
+            idx = 1
+            while True:
+                client_id = os.getenv(f'REDDIT_CLIENT_ID_{idx}') or (os.getenv('REDDIT_CLIENT_ID') if idx == 1 else None)
+                client_secret = os.getenv(f'REDDIT_CLIENT_SECRET_{idx}') or (os.getenv('REDDIT_CLIENT_SECRET') if idx == 1 else None)
+                username = os.getenv(f'REDDIT_USERNAME_{idx}') or (os.getenv('REDDIT_USERNAME') if idx == 1 else None)
+                password = os.getenv(f'REDDIT_PASSWORD_{idx}') or (os.getenv('REDDIT_PASSWORD') if idx == 1 else None)
+                if not all([client_id, client_secret, username, password]):
+                    break
+                accs.append({
+                    'client_id': client_id,
+                    'client_secret': client_secret,
+                    'username': username,
+                    'password': password
+                })
+                idx += 1
+            if not accs:
+                # fallback to single account attempt
+                accs = [{
+                    'client_id': os.getenv('REDDIT_CLIENT_ID'),
+                    'client_secret': os.getenv('REDDIT_CLIENT_SECRET'),
+                    'username': os.getenv('REDDIT_USERNAME'),
+                    'password': os.getenv('REDDIT_PASSWORD')
+                }]
+            self.accounts = accs
 
-    def get_access_token(self, account_idx: int = 0) -> str:
-        """Get OAuth token for specific account with thread safety"""
-        with self.token_locks[account_idx]:
-            cache_key = f"token_{account_idx}"
-            cache = self.tokens.get(cache_key, {})
-            
-            # Check cached token
-            if cache.get('token') and time.time() < cache.get('expires_at', 0):
-                return cache['token']
-            
-            # Fetch new token
-            acc = self.accounts[account_idx]
+        # validate
+        for i, a in enumerate(self.accounts):
+            if not all([a.get('client_id'), a.get('client_secret'), a.get('username'), a.get('password')]):
+                raise ValueError(f"Account {i} missing credentials")
+
+        self.account_sessions: List[AccountSession] = [
+            AccountSession(i, a, tokens_per_minute=MAX_REQUESTS_PER_MINUTE_PER_ACCOUNT) for i, a in enumerate(self.accounts)
+        ]
+
+        self.auth_lock = threading.Lock()
+        print(f"✓ Initialized with {len(self.account_sessions)} account(s)")
+
+    # ---------------------
+    # Authentication (thread-safe, cached)
+    # ---------------------
+    def _authenticate_account(self, acc_sess: AccountSession) -> str:
+        with acc_sess.lock:
+            now = _now_ts()
+            if acc_sess.access_token and now < acc_sess.token_expires_at - 10:
+                return acc_sess.access_token
+
+            # throttle auth attempts slightly
+            if now < acc_sess.next_available:
+                time.sleep(acc_sess.next_available - now)
+
+            acc = acc_sess.acc
             auth_string = f"{acc['client_id']}:{acc['client_secret']}"
-            encoded_auth = base64.b64encode(auth_string.encode()).decode()
-            
+            encoded = base64.b64encode(auth_string.encode()).decode()
             headers = {
-                'Authorization': f'Basic {encoded_auth}',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': self.user_agent
+                'Authorization': f"Basic {encoded}",
+                'User-Agent': acc_sess.user_agent,
+                'Content-Type': 'application/x-www-form-urlencoded'
             }
-            
             data = {
                 'grant_type': 'password',
                 'username': acc['username'],
                 'password': acc['password']
             }
-            
-            response = requests.post(
-                'https://www.reddit.com/api/v1/access_token',
-                headers=headers,
-                data=data,
-                timeout=10
-            )
-            
-            if not response.ok:
-                raise Exception(f"Auth failed for account {account_idx}: {response.text}")
-            
-            token_data = response.json()
-            
-            # Cache token
-            self.tokens[cache_key] = {
-                'token': token_data['access_token'],
-                'expires_at': time.time() + (token_data['expires_in'] - 300)
-            }
-            
-            print(f"  ✓ Account {account_idx + 1} authenticated")
-            return token_data['access_token']
+            resp = acc_sess.session.post("https://www.reddit.com/api/v1/access_token", headers=headers, data=data, timeout=10)
+            if not resp.ok:
+                # slight backoff on auth failure
+                acc_sess.next_available = _now_ts() + 5 + random.random()*3
+                raise Exception(f"Auth failure account {acc_sess.index}: {resp.status_code} {resp.text}")
 
-    def fetch_posts_batch(
-        self,
-        query: str,
-        limit: int = 100,
-        sort: str = 'top',
-        time_filter: str = 'month',
-        account_idx: int = 0
-    ) -> List[Dict]:
-        """Fetch posts using specific account"""
-        token = self.get_access_token(account_idx)
-        
-        # Improve query formatting for better search results
+            token_data = resp.json()
+            acc_sess.access_token = token_data['access_token']
+            # expires_in usually ~3600
+            acc_sess.token_expires_at = _now_ts() + token_data.get('expires_in', 3600)
+            # small buffer
+            acc_sess.token_expires_at -= 10
+            acc_sess.next_available = _now_ts() + 0.1
+            return acc_sess.access_token
+
+    # choose a currently-available account (non-blocking). returns index or None.
+    def _pick_available_account(self) -> Optional[AccountSession]:
+        # prefer accounts that are not currently rate-limited and have tokens
+        random.shuffle(self.account_sessions)
+        now = _now_ts()
+        for acc_sess in self.account_sessions:
+            if acc_sess.rate_limited_until > now:
+                continue
+            if acc_sess.token_bucket.consume(0):  # check without consuming now; we'll actually consume later
+                return acc_sess
+        # fallback: return the one with soonest availability
+        return min(self.account_sessions, key=lambda a: a.rate_limited_until)
+
+    # wrapper to make a safe API call using an account session
+    def _safe_get(self, url: str, acc_sess: AccountSession, params=None, timeout=15) -> Optional[requests.Response]:
+        # wait until token available for this account
+        if not acc_sess.token_bucket.wait_for_token(timeout=10):
+            # couldn't get token -> account busy; return None so caller can pick another account
+            return None
+
+        # if account is currently rate-limited by prior header, respect it
+        now = _now_ts()
+        if acc_sess.rate_limited_until > now:
+            return None
+
+        try:
+            token = self._authenticate_account(acc_sess)
+        except Exception as e:
+            # auth failed: mark account unavailable briefly
+            acc_sess.rate_limited_until = _now_ts() + 10
+            print(f"Auth error (account {acc_sess.index}): {e}")
+            return None
+
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'User-Agent': acc_sess.user_agent
+        }
+        try:
+            resp = acc_sess.session.get(url, headers=headers, params=params, timeout=timeout)
+        except Exception as e:
+            # network error: allow retry later
+            print(f"Network error account {acc_sess.index}: {e}")
+            acc_sess.rate_limited_until = _now_ts() + 2
+            return None
+
+        # If reddit returns rate limit headers, adjust account behavior
+        if resp is not None and resp.headers:
+            try:
+                remaining = resp.headers.get('x-ratelimit-remaining')
+                reset = resp.headers.get('x-ratelimit-reset')
+                used = resp.headers.get('x-ratelimit-used')
+                if remaining is not None and reset is not None:
+                    try:
+                        rem = float(remaining)
+                        rst = float(reset)
+                        if rem < 1:
+                            # mark account as unavailable for reset seconds (add jitter)
+                            acc_sess.rate_limited_until = _now_ts() + rst + random.uniform(0.5, 3.0)
+                            print(f"Account {acc_sess.index} exhausted rate-limit; sleeping {rst:.1f}s")
+                    except:
+                        pass
+            except Exception:
+                pass
+
+        # handle HTTP status codes
+        if resp.status_code == 429:
+            # Too Many Requests. increase rate-limited window and backoff.
+            backoff = 5 + random.random()*5
+            acc_sess.rate_limited_until = _now_ts() + backoff
+            print(f"429 for account {acc_sess.index}, backing off {backoff:.1f}s")
+            return None
+        if resp.status_code >= 500:
+            # transient server error: small backoff
+            acc_sess.rate_limited_until = _now_ts() + 2 + random.random()*3
+            return None
+        if not resp.ok:
+            # other errors: just return None (caller handles)
+            return None
+
+        return resp
+
+    # === fetch posts (kept similar to your original logic but using new safe calls) ===
+    def fetch_posts_batch(self, query: str, limit: int = 100, sort: str = 'top', time_filter: str = 'month', account_idx: int = 0) -> List[Dict]:
         formatted_query = query.strip()
-        
-        # For multi-word queries, try both phrase and individual terms
         if ' ' in formatted_query and not formatted_query.startswith('"'):
-            # Add quotes for exact phrase matching when appropriate
             formatted_query = f'"{formatted_query}"'
-        
-        url = (
-            f"https://oauth.reddit.com/search.json"
-            f"?q={requests.utils.quote(formatted_query)}"
-            f"&limit={limit}"
-            f"&sort={sort}"
-            f"&t={time_filter}"
-            f"&type=link"  # Focus on link posts (not just comments)
-            f"&raw_json=1"
-        )
-        
-        headers = {
-            'Authorization': f'Bearer {token}',
-            'User-Agent': self.user_agent
+        params = {
+            'q': formatted_query,
+            'limit': limit,
+            'sort': sort,
+            't': time_filter,
+            'type': 'link',
+            'raw_json': 1
         }
-        
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if not response.ok:
-            if response.status_code == 429:
-                print(f"⚠️  Account {account_idx} rate limited")
-                time.sleep(30)
-            raise Exception(f"Post fetch failed: {response.status_code}")
-        
-        data = response.json()
-        posts = data['data']['children']
-        
-        # Filter out media-heavy posts and ensure relevance to query
-        text_posts = []
-        query_keywords = [word.lower().strip() for word in query.lower().split() if len(word.strip()) > 2]
-        
-        for post in posts:
-            p = post['data']
-            
-            # Skip media posts
-            if p.get('is_video') or p.get('post_hint') in ['image', 'hosted:video', 'rich:video']:
+        # try multiple attempts across accounts to reduce single-account load
+        attempts = 0
+        max_attempts = len(self.account_sessions) * 2
+        last_exception = None
+        while attempts < max_attempts:
+            attempts += 1
+            acc_sess = self.account_sessions[account_idx % len(self.account_sessions)]
+            resp = self._safe_get("https://oauth.reddit.com/search.json", acc_sess, params=params)
+            if resp is None:
+                # pick a different account and continue
+                account_idx = (account_idx + 1) % len(self.account_sessions)
+                time.sleep(0.05)  # tiny yield
                 continue
-                
-            # Skip posts with no text
-            if not p.get('selftext', '').strip() and len(p.get('title', '')) < 20:
+            try:
+                data = resp.json()
+                posts = data.get('data', {}).get('children', [])
+                # filter as before (keeps your relevance heuristics)
+                text_posts = []
+                query_keywords = [word.lower().strip() for word in query.lower().split() if len(word.strip()) > 2]
+                for post in posts:
+                    p = post['data']
+                    if p.get('is_video') or p.get('post_hint') in ['image', 'hosted:video', 'rich:video']:
+                        continue
+                    if not p.get('selftext', '').strip() and len(p.get('title', '')) < 20:
+                        continue
+                    combined = f"{p.get('title','').lower()} {p.get('selftext','').lower()}"
+                    if any(k in combined for k in query_keywords):
+                        text_posts.append(post)
+                return text_posts
+            except Exception as e:
+                last_exception = e
+                account_idx = (account_idx + 1) % len(self.account_sessions)
+                time.sleep(0.05 + random.random()*0.1)
                 continue
-            
-            # CRITICAL: Ensure post is actually related to the search query
-            title = p.get('title', '').lower()
-            selftext = p.get('selftext', '').lower()
-            combined_text = f"{title} {selftext}"
-            
-            # Check if at least one query keyword appears in title or text
-            has_keyword = any(keyword in combined_text for keyword in query_keywords)
-            
-            if has_keyword:
-                text_posts.append(post)
-            else:
-                # Debug: Show what was filtered out
-                print(f"   Filtered irrelevant post: {p.get('title', '')[:50]}...")
-        
-        print(f"   Filtered {len(posts)} -> {len(text_posts)} relevant posts")
-        return text_posts
+        # all attempts failed
+        raise Exception(f"fetch_posts_batch failed after {attempts} attempts: {last_exception}")
 
-    def fetch_comments_lightweight(
-        self,
-        permalink: str,
-        limit: int = 50,
-        min_score: int = 5,
-        account_idx: int = 0,
-        query: str = ""
-    ) -> List[Dict]:
-        """Fetch only essential comment data"""
-        token = self.get_access_token(account_idx)
-        
+    def fetch_comments_lightweight(self, permalink: str, limit: int = 50, min_score: int = 5, account_idx: int = 0, query: str = "") -> List[Dict]:
         clean_permalink = permalink[1:] if permalink.startswith('/') else permalink
-        
-        url = (
-            f"https://oauth.reddit.com/{clean_permalink}.json"
-            f"?limit={limit}"
-            f"&sort=top"
-            f"&raw_json=1"
-        )
-        
-        headers = {
-            'Authorization': f'Bearer {token}',
-            'User-Agent': self.user_agent
-        }
-        
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        if not response.ok:
-            return []
-        
-        data = response.json()
-        
-        # Extract post title
-        post_title = data[0]['data']['children'][0]['data'].get('title', '')
-        
-        # Flatten comments
-        comments_data = data[1]['data']['children'] if len(data) > 1 else []
-        
-        lightweight_comments = []
-        
-        # Prepare query keywords for relevance filtering
-        query_keywords = [word.lower().strip() for word in query.lower().split() if len(word.strip()) > 2] if query else []
-        
-        def extract_comments(comment_list, depth=0):
-            for comment in comment_list:
-                if comment.get('kind') != 't1':
-                    continue
-                
-                c = comment['data']
-                score = c.get('score', 0)
-                body = c.get('body', '').strip()
-                
-                # Filter low-quality comments
-                if score < min_score or len(body) < 10 or body in ['[deleted]', '[removed]']:
-                    continue
-                
-                # CRITICAL: Filter comments for relevance to search query
-                if query_keywords:
-                    body_lower = body.lower()
-                    title_lower = post_title.lower()
-                    combined_text = f"{body_lower} {title_lower}"
-                    
-                    # Check if comment or post title contains query keywords
-                    has_keyword = any(keyword in combined_text for keyword in query_keywords)
-                    
-                    # Also check for partial matches (for compound terms like "apple watch")
-                    query_lower = query.lower()
-                    has_phrase = query_lower in combined_text
-                    
-                    if not (has_keyword or has_phrase):
-                        continue  # Skip irrelevant comments
-                
-                lightweight_comments.append({
-                    'id': c['id'],
-                    'text': body,
-                    'score': score,
-                    'post_title': post_title
-                })
-                
-                # Process replies (limit depth)
-                if depth < 3:
-                    replies = c.get('replies', {})
-                    if isinstance(replies, dict) and 'data' in replies:
-                        extract_comments(replies['data'].get('children', []), depth + 1)
-        
-        extract_comments(comments_data)
-        
-        return lightweight_comments
+        url = f"https://oauth.reddit.com/{clean_permalink}.json"
+        params = {'limit': limit, 'sort': 'top', 'raw_json': 1}
 
-    def fetch_mass_comments(
-        self,
-        query: str,
-        target_comments: int = 10000,
-        min_score: int = 5,
-        progress_callback=None
-    ) -> Dict[str, Any]:
-        """
-        Fetch 10K+ comments efficiently using multi-account parallel fetching
-        
-        OPTIMIZATIONS:
-        - Parallel post fetching
-        - Optimal thread pool sizing
-        - Smart rate limit handling
-        - Minimal delays (only when needed)
-        """
-        
-        print(f"\n{'='*60}")
-        print(f"🚀 ULTRA-FAST FETCH MODE")
-        print(f"   Target: {target_comments} comments")
-        print(f"   Accounts: {len(self.accounts)}")
-        print(f"   Min Score: {min_score}")
-        print(f"{'='*60}\n")
-        
-        start_time = time.time()
-        all_comments = {}
-        
-        # PHASE 1: Parallel post fetching with ALL accounts
-        if progress_callback:
-            progress_callback(0, 100, 'Fetching posts in parallel')
-        
-        # Optimized strategies prioritizing relevance for better query matching
-        strategies = [
-            {'sort': 'relevance', 't': 'all'},      # Most relevant overall
-            {'sort': 'relevance', 't': 'year'},     # Most relevant this year
-            {'sort': 'relevance', 't': 'month'},    # Most relevant this month
-            {'sort': 'comments', 't': 'month'},     # Most discussed recently
-            {'sort': 'comments', 't': 'year'},      # Most discussed this year
-            {'sort': 'top', 't': 'month'},          # Top posts this month
-            {'sort': 'top', 't': 'year'},           # Top posts this year
-            {'sort': 'hot', 't': 'month'},          # Currently trending
-            {'sort': 'new', 't': 'month'}           # Recent discussions
-        ]
-        
+        # attempt across accounts to reduce banning risk
+        results = []
+        for attempt in range(len(self.account_sessions)):
+            acc_idx = (account_idx + attempt) % len(self.account_sessions)
+            acc_sess = self.account_sessions[acc_idx]
+            resp = self._safe_get(url, acc_sess, params=params)
+            if resp is None:
+                # try next account
+                continue
+            try:
+                data = resp.json()
+            except:
+                continue
+
+            # extract post title safely
+            try:
+                post_title = data[0]['data']['children'][0]['data'].get('title', '')
+            except:
+                post_title = ''
+
+            comments_data = data[1]['data']['children'] if len(data) > 1 else []
+            query_keywords = [word.lower().strip() for word in query.lower().split() if len(word.strip()) > 2] if query else []
+
+            def extract_comments(comment_list, depth=0):
+                for comment in comment_list:
+                    if comment.get('kind') != 't1':
+                        continue
+                    c = comment['data']
+                    score = c.get('score', 0)
+                    body = c.get('body', '').strip()
+                    if score < min_score or len(body) < 10 or body in ['[deleted]', '[removed]']:
+                        continue
+                    if query_keywords:
+                        combined_text = f"{body.lower()} {post_title.lower()}"
+                        if not any(k in combined_text for k in query_keywords) and (query.lower() not in combined_text):
+                            continue
+                    results.append({
+                        'id': c['id'],
+                        'text': body,
+                        'score': score,
+                        'post_title': post_title
+                    })
+                    if depth < 3:
+                        replies = c.get('replies', {})
+                        if isinstance(replies, dict) and 'data' in replies:
+                            extract_comments(replies['data'].get('children', []), depth + 1)
+
+            extract_comments(comments_data)
+            # success -> return (do not keep hammering accounts)
+            return results
+
+        # if every account failed, return empty list so caller can handle
+        return []
+
+    def fetch_mass_comments(self, query: str, target_comments: int = 10000, min_score: int = 5, progress_callback=None) -> Dict[str, Any]:
+        start = time.time()
         all_posts = []
-        
-        # Use optimal workers for 3 accounts
-        max_workers = min(len(self.accounts) * 3, 9)
-        
-        print(f"Phase 1: Fetching posts with {max_workers} parallel workers...")
-        
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_strategy = {}
-            
-            # Submit ALL strategies at once
-            for idx, strategy in enumerate(strategies):
-                account_idx = idx % len(self.accounts)
-                future = executor.submit(
-                    self.fetch_posts_batch,
-                    query=query,
-                    limit=100,
-                    sort=strategy['sort'],
-                    time_filter=strategy['t'],
-                    account_idx=account_idx
-                )
-                future_to_strategy[future] = (strategy, account_idx)
-            
-            # Collect results as they complete
-            for future in as_completed(future_to_strategy.keys()):
-                strategy, acc_idx = future_to_strategy[future]
+        strategies = [
+            {'sort': 'relevance', 't': 'all'},
+            {'sort': 'relevance', 't': 'year'},
+            {'sort': 'comments', 't': 'month'},
+            {'sort': 'top', 't': 'month'},
+            {'sort': 'hot', 't': 'month'},
+            {'sort': 'new', 't': 'month'}
+        ]
+        # Phase 1: fetch posts in parallel
+        max_workers = min(max(1, len(self.account_sessions) * MAX_WORKERS_PER_ACCOUNT), GLOBAL_MAX_WORKERS)
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = []
+            for idx, strat in enumerate(strategies):
+                account_idx = idx % len(self.account_sessions)
+                futures.append(ex.submit(self.fetch_posts_batch, query, 100, strat['sort'], strat['t'], account_idx))
+            for f in as_completed(futures):
                 try:
-                    posts = future.result()
+                    posts = f.result()
                     all_posts.extend(posts)
-                    print(f"  ✓ Strategy {strategy['sort']}/{strategy['t']} (Account {acc_idx + 1}): {len(posts)} posts")
                 except Exception as e:
-                    print(f"  ✗ Strategy {strategy['sort']}/{strategy['t']} failed: {e}")
-        
-        # Deduplicate and sort
-        unique_posts = {p['data']['id']: p for p in all_posts}
-        all_posts = list(unique_posts.values())
+                    # continue; some strategies may fail due to rate-limit
+                    print("strategy failed:", e)
+
+        # dedupe/sort posts
+        uniq = {p['data']['id']: p for p in all_posts}
+        all_posts = list(uniq.values())
         all_posts.sort(key=lambda p: p['data'].get('num_comments', 0), reverse=True)
-        
-        phase1_time = time.time() - start_time
-        print(f"✓ Phase 1 Complete: {len(all_posts)} posts in {phase1_time:.1f}s")
-        
-        # PHASE 2: Aggressive parallel comment fetching
-        if progress_callback:
-            progress_callback(20, 100, 'Fetching comments')
-        
+
+        # Phase 2: fetch comments parallel but with controlled concurrency
+        comments_needed = target_comments
+        comments_by_id = {}
         comments_per_post = 30
-        estimated_posts_needed = (target_comments // comments_per_post) + 100
-        posts_to_process = all_posts[:min(estimated_posts_needed, len(all_posts))]
-        
-        print(f"\nPhase 2: Processing {len(posts_to_process)} posts for comments...")
-        
-        # CRITICAL: Optimal workers for 3 accounts
-        # Each account = ~60 req/min = 1 req/sec safe rate
-        # With 3 accounts: 9-12 parallel workers is optimal
-        max_workers = min(len(self.accounts) * 4, 12)
-        
-        print(f"  Using {max_workers} parallel workers for comments")
-        
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_info = {}
-            
-            # Submit ALL posts at once (let executor handle queuing)
-            for idx, post in enumerate(posts_to_process):
-                account_idx = idx % len(self.accounts)
-                permalink = post['data']['permalink']
-                
-                future = executor.submit(
-                    self.fetch_comments_lightweight,
-                    permalink=permalink,
-                    limit=100,
-                    min_score=min_score,
-                    account_idx=account_idx,
-                    query=query
-                )
-                future_to_info[future] = (idx, account_idx)
-            
-            completed = 0
-            last_log_time = time.time()
-            
-            for future in as_completed(future_to_info.keys()):
-                idx, acc_idx = future_to_info[future]
-                try:
-                    comments = future.result()
-                    
-                    # Add to collection
-                    for comment in comments:
-                        if comment['id'] not in all_comments:
-                            all_comments[comment['id']] = comment
-                    
-                    completed += 1
-                    
-                    # Log progress every 2 seconds
-                    current_time = time.time()
-                    if current_time - last_log_time >= 2:
-                        current_count = len(all_comments)
-                        progress_pct = min(20 + int((current_count / target_comments) * 70), 90)
-                        if progress_callback:
-                            progress_callback(progress_pct, 100, f'Comments: {current_count}/{target_comments}')
-                        print(f"  Progress: {current_count} comments ({completed}/{len(posts_to_process)} posts)")
-                        last_log_time = current_time
-                    
-                    # Stop if target reached (but let current batch finish)
-                    if len(all_comments) >= target_comments and completed > len(posts_to_process) * 0.5:
-                        break
-                        
-                except Exception as e:
-                    error_msg = str(e)
-                    if '429' in error_msg:
-                        print(f"  ⚠️  Rate limit on account {acc_idx + 1}")
-        
-        # Finalize
-        final_comments = list(all_comments.values())
-        final_comments.sort(key=lambda c: c['score'], reverse=True)
-        final_comments = final_comments[:target_comments]
-        
-        elapsed = time.time() - start_time
-        
+        estimated_posts = min(len(all_posts), (comments_needed // comments_per_post) + 200)
+        posts_to_process = all_posts[:estimated_posts]
+
         if progress_callback:
-            progress_callback(100, 100, 'Complete')
-        
-        print(f"\n{'='*60}")
-        print(f"✅ FETCH COMPLETE")
-        print(f"   Comments: {len(final_comments):,}")
-        print(f"   Time: {elapsed:.1f}s")
-        print(f"   Speed: {len(final_comments)/elapsed:.1f} comments/sec")
-        print(f"   Efficiency: {len(final_comments)/(len(self.accounts)*elapsed):.1f} comments/sec/account")
-        print(f"{'='*60}\n")
-        
-        # Statistics
-        scores = [c['score'] for c in final_comments]
-        unique_post_titles = set(c['post_title'] for c in final_comments)
-        
-        return {
-            'comments': final_comments,
+            progress_callback(10, 100, 'Fetching comments')
+
+        max_workers = min(len(self.account_sessions) * 4, GLOBAL_MAX_WORKERS)
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futures = {}
+            for i, post in enumerate(posts_to_process):
+                acc_index = i % len(self.account_sessions)
+                perm = post['data']['permalink']
+                fut = ex.submit(self.fetch_comments_lightweight, perm, 100, min_score, acc_index, query)
+                futures[fut] = perm
+            completed = 0
+            last_progress_time = time.time()
+            for fut in as_completed(futures):
+                completed += 1
+                try:
+                    comments = fut.result()
+                    for c in comments:
+                        comments_by_id[c['id']] = c
+                except Exception as e:
+                    print("comment fetch error:", e)
+                # progress update
+                if time.time() - last_progress_time > 1:
+                    current = len(comments_by_id)
+                    pct = min(10 + int((current / comments_needed) * 80), 95)
+                    if progress_callback:
+                        progress_callback(pct, 100, f'Comments: {current}/{comments_needed}')
+                    last_progress_time = time.time()
+                if len(comments_by_id) >= comments_needed:
+                    break
+
+        final = list(comments_by_id.values())
+        final.sort(key=lambda c: c['score'], reverse=True)
+        final = final[:target_comments]
+        elapsed = time.time() - start
+        stats = {
+            'comments': final,
             'metadata': {
                 'query': query,
-                'totalComments': len(final_comments),
-                'totalPosts': len(unique_post_titles),
+                'totalComments': len(final),
                 'targetComments': target_comments,
                 'minScore': min_score,
-                'averageScore': round(sum(scores) / len(scores)) if scores else 0,
-                'minScoreValue': min(scores) if scores else 0,
-                'maxScoreValue': max(scores) if scores else 0,
                 'fetchTime': round(elapsed, 2),
-                'commentsPerSecond': round(len(final_comments) / elapsed, 2),
-                'accountsUsed': len(self.accounts),
+                'commentsPerSecond': round(len(final)/elapsed, 2) if elapsed > 0 else 0,
+                'accountsUsed': len(self.account_sessions),
                 'fetchedAt': datetime.utcnow().isoformat(),
-                'source': 'Reddit API (Ultra-Fast Multi-Account)'
             }
         }
-
-
-# Test function
-def main():
-    import json
-    from dotenv import load_dotenv
-    
-    load_dotenv()
-    
-    # Initialize fetcher (loads from .env automatically)
-    fetcher = MultiAccountRedditFetcher()
-    
-    def progress_callback(current, total, stage):
-        print(f"[{current}/{total}] {stage}")
-    
-    query = "iPhone 16"
-    
-    result = fetcher.fetch_mass_comments(
-        query=query,
-        target_comments=10000,
-        min_score=5,
-        progress_callback=progress_callback
-    )
-    
-    # Save
-    filename = f"reddit_comments_{query.replace(' ', '_')}_{int(time.time())}.json"
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
-    
-    print(f"\n✅ Saved {len(result['comments'])} comments to {filename}")
-    print(f"   File size: ~{os.path.getsize(filename) / 1024:.1f} KB")
-
-
-if __name__ == "__main__":
-    main()
+        if progress_callback:
+            progress_callback(100, 100, 'Complete')
+        print(f"Fetch complete: {len(final)} comments in {elapsed:.1f}s (accounts={len(self.account_sessions)})")
+        return stats
