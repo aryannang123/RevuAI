@@ -24,7 +24,7 @@ const getCurrentUser = async () => {
   }
 };
 
-// 🌈 Define the color array outside the component to prevent re-renders
+// 🌈 Static Iridescence Color
 const IRIDESCENCE_COLOR = [0.3, 0.6, 1];
 
 export default function Home() {
@@ -34,6 +34,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [isClient, setIsClient] = useState(false); // ✅ ensure client rendering
 
   const loadingStates = [
     { text: "Authenticating with Reddit API" },
@@ -43,6 +44,12 @@ export default function Home() {
     { text: "Finalizing results" },
   ];
 
+  // ✅ Detect client-side only rendering
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // ✅ Verify logged-in user
   useEffect(() => {
     const verifyUser = async () => {
       const u = await getCurrentUser();
@@ -55,55 +62,60 @@ export default function Home() {
     verifyUser();
   }, [router]);
 
-  const handleSearch = useCallback(async (query?: string) => {
-    const searchTerm = query || searchQuery.trim();
-    if (!searchTerm) {
-      setError("Please enter a search query");
-      return;
-    }
-    
-    // Update search query if using history
-    if (query) {
-      setSearchQuery(query);
-    }
-    
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Save search to database
-      if (user) {
-        await fetch('/api/searches', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            userEmail: user.email,
-            searchQuery: searchTerm,
-          }),
-        });
+  // ✅ Handle Search
+  const handleSearch = useCallback(
+    async (query?: string) => {
+      const searchTerm = query || searchQuery.trim();
+      if (!searchTerm) {
+        setError("Please enter a search query");
+        return;
       }
 
-      const BACKEND_URL =
-        process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
-      const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: searchTerm,
-          target_comments: 2000,  // Optimized for speed and quality
-          min_score: 2,           // Lower score threshold for more comments
-        }),
-      });
-      if (!response.ok) throw new Error("Failed to fetch Reddit data");
-      const processedData = await response.json();
-      sessionStorage.setItem("reddit_data", JSON.stringify(processedData));
-      sessionStorage.setItem("search_query", searchTerm);
-      router.push("/analysis");
-    } catch (err: any) {
-      setError(err.message || "An unexpected error occurred");
-      setIsLoading(false);
-    }
-  }, [searchQuery, router, user]);
+      if (query) setSearchQuery(query);
+
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Save search history
+        if (user) {
+          await fetch("/api/searches", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: user.id,
+              userEmail: user.email,
+              searchQuery: searchTerm,
+            }),
+          });
+        }
+
+        const BACKEND_URL =
+          process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
+
+        const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: searchTerm,
+            target_comments: 2000,
+            min_score: 2,
+          }),
+        });
+
+        if (!response.ok) throw new Error("Failed to fetch Reddit data");
+
+        const processedData = await response.json();
+        sessionStorage.setItem("reddit_data", JSON.stringify(processedData));
+        sessionStorage.setItem("search_query", searchTerm);
+
+        router.push("/analysis");
+      } catch (err: any) {
+        setError(err.message || "An unexpected error occurred");
+        setIsLoading(false);
+      }
+    },
+    [searchQuery, router, user]
+  );
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !isLoading) {
@@ -120,6 +132,7 @@ export default function Home() {
 
   return (
     <>
+      {/* Loading Overlay */}
       <MultiStepLoader
         loadingStates={loadingStates}
         loading={isLoading}
@@ -141,7 +154,6 @@ export default function Home() {
         {/* 🧊 Slim Glass Navbar */}
         <div className="absolute top-8 z-30 w-full px-8">
           <div className="flex justify-center items-center relative">
-            {/* Centered Navigation */}
             <div className="backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] px-10 py-2">
               <div style={{ height: "40px", position: "relative", width: "auto" }}>
                 <GooeyNav
@@ -157,7 +169,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Menu Button - Positioned Absolutely to Left */}
+            {/* Menu Button */}
             {user && (
               <button
                 onClick={() => setSidebarOpen(true)}
@@ -178,7 +190,7 @@ export default function Home() {
             AI-powered Reddit sentiment analysis — uncover insights instantly
           </p>
 
-          {/* 🔍 Curved Glass Search Bar */}
+          {/* 🔍 Glass Search Bar */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -186,20 +198,26 @@ export default function Home() {
             }}
             className="relative group max-w-2xl mx-auto"
           >
-            {/* Outer glow */}
             <div className="absolute -inset-[1px] bg-gradient-to-r from-white/60 via-white/40 to-white/20 rounded-full blur-[2px] opacity-50 group-hover:opacity-70 transition duration-300"></div>
 
             <div className="relative">
               <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-black/60" />
-              <input
-                type="text"
-                placeholder="Search Reddit for sentiment analysis..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleKeyPress}
-                disabled={isLoading}
-                className="w-full pl-16 pr-20 py-5 rounded-full bg-white/25 backdrop-blur-2xl border border-white/40 text-black font-semibold placeholder-black/50 focus:outline-none focus:border-black/40 focus:ring-4 focus:ring-black/10 shadow-xl text-lg transition-all duration-300 disabled:opacity-60"
-              />
+              
+              {/* ✅ Render input only on client to prevent hydration errors */}
+              {isClient && (
+                <input
+                  key="search-input"
+                  type="text"
+                  placeholder="Search Reddit for sentiment analysis..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  disabled={isLoading}
+                  data-gramm="false"
+                  data-gramm_editor="false"
+                  className="w-full pl-16 pr-20 py-5 rounded-full bg-white/25 backdrop-blur-2xl border border-white/40 text-black font-semibold placeholder-black/50 focus:outline-none focus:border-black/40 focus:ring-4 focus:ring-black/10 shadow-xl text-lg transition-all duration-300 disabled:opacity-60"
+                />
+              )}
 
               {/* Circular glass arrow button */}
               <button
@@ -218,7 +236,11 @@ export default function Home() {
                     stroke="black"
                     className="w-5 h-5"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M17 8l4 4m0 0l-4 4m4-4H3"
+                    />
                   </svg>
                 )}
               </button>
@@ -236,7 +258,7 @@ export default function Home() {
       </main>
 
       {/* Sidebar */}
-      <Sidebar 
+      <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onSearchSelect={handleSearch}
