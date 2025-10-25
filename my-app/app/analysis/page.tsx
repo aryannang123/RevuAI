@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Iridescence from "@/components/Iridescence";
+import GooeyNav from "@/components/GooeyNav";
 
 export default function AnalysisPage() {
   const router = useRouter();
@@ -38,19 +39,19 @@ export default function AnalysisPage() {
       });
   }, [router]);
 
+  // 🌀 Loading State
   if (loading || !sentimentData) {
     return (
       <main className="relative h-screen w-full flex items-center justify-center overflow-hidden text-white">
-        {/* 🪩 Iridescent Background */}
+        {/* 🌈 Iridescent Background */}
         <div className="fixed top-0 left-0 w-screen h-screen -z-10">
-  <Iridescence
-    color={[0.4, 0.6, 1]}
-    mouseReact={false}
-    amplitude={0.1}
-    speed={1.0}
-  />
-</div>
-
+          <Iridescence
+            color={[0.4, 0.6, 1]}
+            mouseReact={false}
+            amplitude={0.1}
+            speed={1.0}
+          />
+        </div>
 
         {/* Loader */}
         <div className="relative text-center z-10">
@@ -64,11 +65,16 @@ export default function AnalysisPage() {
     );
   }
 
-  // ✅ After Loading — Display Buttons (top-right)
+  // ✅ After Loading
+  const items = [
+    { label: "Consumer", href: "#" },
+    { label: "Developer", href: "#" },
+  ];
+
   return (
-    <main className="relative h-screen w-full overflow-hidden text-white">
-      {/* 🪩 Iridescent Background */}
-      <div className="absolute inset-0 -z-10">
+    <main className="relative min-h-screen w-screen overflow-hidden text-white">
+      {/* 🌈 Iridescent Background */}
+      <div className="fixed top-0 left-0 w-screen h-screen -z-10">
         <Iridescence
           color={[0.4, 0.6, 1]}
           mouseReact={false}
@@ -77,18 +83,32 @@ export default function AnalysisPage() {
         />
       </div>
 
-      {/* 🧊 Top-Right Buttons */}
-      <div className="absolute top-6 right-8 z-50 flex gap-4 animate-fade-in">
-        <button className="px-6 py-2 rounded-2xl bg-white/15 backdrop-blur-xl border border-white/30 text-white font-semibold shadow-[0_0_25px_rgba(255,255,255,0.15)] hover:bg-white/25 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] transition-all duration-300">
-          Consumer
-        </button>
-        <button className="px-6 py-2 rounded-2xl bg-white/15 backdrop-blur-xl border border-white/30 text-white font-semibold shadow-[0_0_25px_rgba(255,255,255,0.15)] hover:bg-white/25 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] transition-all duration-300">
-          Developer
-        </button>
+      {/* 🧊 Glass Navbar (Top Right) */}
+      <div className="absolute top-8 right-8 z-50">
+        <div className="backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] px-8 py-2">
+          <div
+            style={{
+              height: "40px",
+              position: "relative",
+              width: "auto",
+            }}
+          >
+            <GooeyNav
+              items={items}
+              particleCount={15}
+              particleDistances={[90, 10]}
+              particleR={100}
+              initialActiveIndex={0}
+              animationTime={600}
+              timeVariance={300}
+              colors={[1, 2, 3, 1, 2, 3, 1, 4]}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Optional Text in Center */}
-      <div className="h-full flex items-center justify-center text-4xl font-bold text-white/85 animate-fade-in">
+      {/* ✨ Center Text */}
+      <div className="h-full flex items-center justify-center text-5xl font-bold text-white/90 animate-fade-in">
         Choose Your Portal
       </div>
 
