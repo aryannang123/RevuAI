@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { MultiStepLoader } from "@/components/ui/multi-step-loader";
-import { Search, Menu } from "lucide-react";
+import { Search, Menu, Cpu, LineChart, Zap } from "lucide-react";
 import Iridescence from "../components/Iridescence";
 import GooeyNav from "../components/GooeyNav";
 import Sidebar from "../components/Sidebar";
@@ -34,7 +34,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [isClient, setIsClient] = useState(false); // ✅ ensure client rendering
+  const [isClient, setIsClient] = useState(false);
 
   const loadingStates = [
     { text: "Authenticating with Reddit API" },
@@ -44,25 +44,17 @@ export default function Home() {
     { text: "Finalizing results" },
   ];
 
-  // ✅ Detect client-side only rendering
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  useEffect(() => setIsClient(true), []);
 
-  // ✅ Verify logged-in user
   useEffect(() => {
     const verifyUser = async () => {
       const u = await getCurrentUser();
-      if (!u) {
-        router.push("/login");
-      } else {
-        setUser(u);
-      }
+      if (!u) router.push("/login");
+      else setUser(u);
     };
     verifyUser();
   }, [router]);
 
-  // ✅ Handle Search
   const handleSearch = useCallback(
     async (query?: string) => {
       const searchTerm = query || searchQuery.trim();
@@ -70,13 +62,10 @@ export default function Home() {
         setError("Please enter a search query");
         return;
       }
-
       if (query) setSearchQuery(query);
-
       setIsLoading(true);
       setError(null);
       try {
-        // Save search history
         if (user) {
           await fetch("/api/searches", {
             method: "POST",
@@ -91,7 +80,6 @@ export default function Home() {
 
         const BACKEND_URL =
           process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
-
         const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -107,7 +95,6 @@ export default function Home() {
         const processedData = await response.json();
         sessionStorage.setItem("reddit_data", JSON.stringify(processedData));
         sessionStorage.setItem("search_query", searchTerm);
-
         router.push("/analysis");
       } catch (err: any) {
         setError(err.message || "An unexpected error occurred");
@@ -132,7 +119,6 @@ export default function Home() {
 
   return (
     <>
-      {/* Loading Overlay */}
       <MultiStepLoader
         loadingStates={loadingStates}
         loading={isLoading}
@@ -169,7 +155,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Menu Button */}
             {user && (
               <button
                 onClick={() => setSidebarOpen(true)}
@@ -183,12 +168,34 @@ export default function Home() {
 
         {/* 🧠 Rev AI Section */}
         <div className="relative z-10 text-center px-6 animate-fade-in mt-20">
-          <h1 className="text-7xl font-extrabold mb-4 text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.3)]">
+          <h1 className="text-7xl font-extrabold mb-4 text-white drop-shadow-[0_0_35px_rgba(173,216,230,0.6)]">
             Rev AI
           </h1>
-          <p className="text-white font-semibold text-lg md:text-xl max-w-xl mx-auto mb-10">
+          <p className="text-cyan-100 font-semibold text-lg md:text-xl max-w-xl mx-auto mb-8">
             AI-powered Reddit sentiment analysis — uncover insights instantly
           </p>
+
+          {/* ✨ Info Badges */}
+          <div className="flex flex-wrap justify-center gap-4 mb-10">
+            <div className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 border border-cyan-300/60 rounded-full backdrop-blur-md shadow-md hover:bg-cyan-400/25 transition-all">
+              <Cpu className="w-4 h-4 text-cyan-200" />
+              <span className="text-sm font-semibold text-cyan-100">
+                Powered by Hugging Face
+              </span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-pink-500/20 border border-pink-300/60 rounded-full backdrop-blur-md shadow-md hover:bg-pink-400/25 transition-all">
+              <Zap className="w-4 h-4 text-pink-200" />
+              <span className="text-sm font-semibold text-pink-100">
+                Real-time Analysis
+              </span>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 border border-purple-300/60 rounded-full backdrop-blur-md shadow-md hover:bg-purple-400/25 transition-all">
+              <LineChart className="w-4 h-4 text-purple-200" />
+              <span className="text-sm font-semibold text-purple-100">
+                Interactive Charts
+              </span>
+            </div>
+          </div>
 
           {/* 🔍 Glass Search Bar */}
           <form
@@ -198,12 +205,10 @@ export default function Home() {
             }}
             className="relative group max-w-2xl mx-auto"
           >
-            <div className="absolute -inset-[1px] bg-gradient-to-r from-white/60 via-white/40 to-white/20 rounded-full blur-[2px] opacity-50 group-hover:opacity-70 transition duration-300"></div>
+            <div className="absolute -inset-[1px] bg-gradient-to-r from-cyan-300/50 via-blue-300/50 to-purple-400/50 rounded-full blur-[3px] opacity-50 group-hover:opacity-70 transition duration-300"></div>
 
             <div className="relative">
               <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-black/60" />
-              
-              {/* ✅ Render input only on client to prevent hydration errors */}
               {isClient && (
                 <input
                   key="search-input"
@@ -215,32 +220,28 @@ export default function Home() {
                   disabled={isLoading}
                   data-gramm="false"
                   data-gramm_editor="false"
-                  className="w-full pl-16 pr-20 py-5 rounded-full bg-white/25 backdrop-blur-2xl border border-white/40 text-black font-semibold placeholder-black/50 focus:outline-none focus:border-black/40 focus:ring-4 focus:ring-black/10 shadow-xl text-lg transition-all duration-300 disabled:opacity-60"
+                  className="w-full pl-16 pr-20 py-5 rounded-full bg-white/25 backdrop-blur-2xl border border-white/40 text-black font-semibold placeholder-black/50 focus:outline-none focus:border-cyan-400/50 focus:ring-4 focus:ring-cyan-300/30 shadow-xl text-lg transition-all duration-300 disabled:opacity-60"
                 />
               )}
 
-              {/* Circular glass arrow button */}
+              {/* Arrow Button */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/30 backdrop-blur-xl border border-white/50 flex items-center justify-center shadow-md hover:scale-105 hover:bg-white/40 transition-all duration-300 disabled:opacity-60"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-500 text-white flex items-center justify-center shadow-lg hover:scale-105 hover:shadow-cyan-500/40 transition-all duration-300 disabled:opacity-60"
               >
                 {isLoading ? (
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-black/50 border-t-transparent"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/60 border-t-transparent"></div>
                 ) : (
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth={2.5}
-                    stroke="black"
+                    stroke="white"
                     className="w-5 h-5"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M17 8l4 4m0 0l-4 4m4-4H3"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                   </svg>
                 )}
               </button>
