@@ -34,7 +34,7 @@ export default function LoginPage() {
     <main className="relative min-h-screen w-full overflow-hidden bg-black">
       {/* ✅ Iridescence Background */}
       <div className="absolute inset-0 -z-10">
-        <Iridescence color={[1, 1, 1]} mouseReact={false} amplitude={0.1} speed={1.0} />
+        <Iridescence color={[0.5, 0.6, 0.8]} mouseReact={false} amplitude={0.1} speed={1.0} />
       </div>
 
       {/* Optional accent glows */}
