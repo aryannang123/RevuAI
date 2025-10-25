@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithGoogle, testConnection } from "@/lib/auth";
 import { LogIn } from "lucide-react";
-import Iridescence from "@/components/Iridescence"; // ✅ your installed shader component
+import Iridescence from "@/components/Iridescence"; // ✅ shader background
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,20 +31,20 @@ export default function LoginPage() {
 
   return (
     <main className="relative min-h-screen w-full overflow-hidden">
-      {/* ✨ Iridescent Animated Background */}
+      {/* ✨ Animated Iridescent Background */}
       <div className="absolute inset-0 -z-10">
         <Iridescence
-          color={[1.2, 1.0, 1.4]} // brighter glow
+          color={[0.4, 0.6, 1]}
           mouseReact={false}
           amplitude={0.15}
           speed={1.0}
         />
       </div>
 
-      {/* 🌈 Gradient fallback (in case WebGL fails) */}
+      {/* 🌈 Gradient fallback */}
       <div className="absolute inset-0 bg-gradient-to-br from-cyan-900 via-purple-900 to-black -z-20" />
 
-      {/* Floating accent glows */}
+      {/* 💠 Floating accent glows */}
       <div className="absolute top-20 left-20 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" />
       <div
         className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse"
@@ -53,65 +53,52 @@ export default function LoginPage() {
 
       {/* 💎 Glassmorphic Login Card */}
       <div className="relative z-10 flex items-center justify-center min-h-screen px-6">
-        <div className="relative bg-white/10 backdrop-blur-3xl border border-cyan-400/30 rounded-3xl shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)] p-10 w-full max-w-md text-center animate-fade-in before:absolute before:inset-0 before:rounded-3xl before:p-[1px] before:bg-gradient-to-r before:from-cyan-400/50 before:to-purple-500/50 before:-z-10 before:blur-[1px]">
+        <div className="group relative w-full max-w-md p-[2px] rounded-3xl bg-gradient-to-r from-cyan-400/40 via-teal-400/40 to-purple-500/40">
+          <div className="relative bg-white/10 backdrop-blur-2xl border border-cyan-400/40 rounded-3xl shadow-[0_0_35px_-10px_rgba(34,211,238,0.5)] p-10 text-center transition-all duration-500 group-hover:shadow-[0_0_50px_-10px_rgba(34,211,238,0.8)]">
+            <h1 className="text-5xl font-extrabold text-white tracking-tight mb-4">
+              Rev AI
+            </h1>
+            <p className="text-white/90 font-semibold text-lg mb-8">
+              Sign in to continue your AI analysis journey
+            </p>
 
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient mb-4">
-            Rev AI
-          </h1>
-          <p className="text-gray-300 text-lg mb-8">
-            Sign in to continue your AI analysis journey
-          </p>
+            {error && (
+              <div className="mb-6 bg-red-500/20 border border-red-500/60 text-white font-semibold px-4 py-3 rounded-xl text-sm shadow-[0_0_10px_rgba(239,68,68,0.5)]">
+                {error}
+              </div>
+            )}
 
-          {error && (
-            <div className="mb-6 bg-red-500/10 border border-red-500/40 text-red-300 px-4 py-3 rounded-xl text-sm">
-              {error}
-            </div>
-          )}
+            <button
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="w-full bg-transparent border border-cyan-400/60 hover:border-cyan-300/90 hover:shadow-[0_0_25px_rgba(34,211,238,0.8)] text-white font-bold py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <LogIn className="w-6 h-6" />
+              {loading ? "Signing in..." : "Continue with Google"}
+            </button>
 
-          <button
-            onClick={handleGoogleSignIn}
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-cyan-500 to-purple-600 hover:scale-105 hover:shadow-cyan-500/50 text-white font-semibold py-4 rounded-2xl shadow-lg transition-all duration-300 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <LogIn className="w-6 h-6" />
-            {loading ? "Signing in..." : "Continue with Google"}
-          </button>
-
-          <p className="mt-6 text-gray-400 text-sm">
-            By signing in, you agree to our{" "}
-            <span className="text-cyan-400 hover:underline cursor-pointer">Terms</span> &{" "}
-            <span className="text-cyan-400 hover:underline cursor-pointer">Privacy Policy</span>.
-          </p>
+            <p className="mt-6 text-white/70 text-sm font-medium">
+              By signing in, you agree to our{" "}
+              <span className="text-cyan-300 hover:underline cursor-pointer font-semibold">Terms</span> &{" "}
+              <span className="text-cyan-300 hover:underline cursor-pointer font-semibold">Privacy Policy</span>.
+            </p>
+          </div>
         </div>
       </div>
 
       {/* ✨ Animations */}
       <style jsx>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
         @keyframes gradient {
-          0%,
-          100% {
+          0%, 100% {
             background-position: 0% 50%;
           }
           50% {
             background-position: 100% 50%;
           }
         }
-        .animate-fade-in {
-          animation: fade-in 0.6s ease-out;
-        }
         .animate-gradient {
           background-size: 200% auto;
-          animation: gradient 3s ease infinite;
+          animation: gradient 4s ease infinite;
         }
       `}</style>
     </main>
