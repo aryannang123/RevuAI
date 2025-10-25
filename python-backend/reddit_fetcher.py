@@ -10,11 +10,11 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import math
 
-# === Config: tune these ===
-MAX_REQUESTS_PER_MINUTE_PER_ACCOUNT = int(os.getenv("MAX_REQ_PER_MIN_PER_ACC", "60"))  # safe default ~60 req/min/account
+# === Config: tune these for faster fetching ===
+MAX_REQUESTS_PER_MINUTE_PER_ACCOUNT = int(os.getenv("MAX_REQ_PER_MIN_PER_ACC", "120"))  # increased from 60 to 120
 MIN_REQUEST_INTERVAL = 60.0 / MAX_REQUESTS_PER_MINUTE_PER_ACCOUNT  # seconds between requests per account on avg
-MAX_WORKERS_PER_ACCOUNT = 3   # small multiplier; overall workers = min(len(accounts)*MAX_WORKERS_PER_ACCOUNT, 20)
-GLOBAL_MAX_WORKERS = int(os.getenv("MAX_GLOBAL_WORKERS", "12"))
+MAX_WORKERS_PER_ACCOUNT = 6   # increased from 3 to 6 for more parallelism
+GLOBAL_MAX_WORKERS = int(os.getenv("MAX_GLOBAL_WORKERS", "24"))  # increased from 12 to 24
 
 # helpful UA variants (small rotation)
 DEFAULT_USER_AGENTS = [
@@ -32,7 +32,7 @@ class TokenBucket:
     Bucket refills continuously at rate tokens_per_sec, capacity = burst_capacity
     Call consume(1) to get permission; returns True if allowed.
     """
-    def __init__(self, tokens_per_minute: float, burst_capacity: int = 3):
+    def __init__(self, tokens_per_minute: float, burst_capacity: int = 6):
         self.rate = tokens_per_minute / 60.0
         self.capacity = max(burst_capacity, 1)
         self._tokens = self.capacity
@@ -61,7 +61,7 @@ class TokenBucket:
             if timeout is not None and _now_ts() - start > timeout:
                 return False
             # sleep a small jittered amount to avoid spin
-            time.sleep(0.05 + random.random() * 0.05)
+            time.sleep(0.02 + random.random() * 0.03)  # reduced sleep time
 
 class AccountSession:
     def __init__(self, index: int, account_info: Dict[str, str], tokens_per_minute: int):
@@ -188,8 +188,8 @@ class MultiAccountRedditFetcher:
 
     # wrapper to make a safe API call using an account session
     def _safe_get(self, url: str, acc_sess: AccountSession, params=None, timeout=15) -> Optional[requests.Response]:
-        # wait until token available for this account
-        if not acc_sess.token_bucket.wait_for_token(timeout=10):
+        # wait until token available for this account (reduced timeout for faster failover)
+        if not acc_sess.token_bucket.wait_for_token(timeout=3):
             # couldn't get token -> account busy; return None so caller can pick another account
             return None
 
@@ -213,9 +213,9 @@ class MultiAccountRedditFetcher:
         try:
             resp = acc_sess.session.get(url, headers=headers, params=params, timeout=timeout)
         except Exception as e:
-            # network error: allow retry later
+            # network error: allow retry later (reduced delay)
             print(f"Network error account {acc_sess.index}: {e}")
-            acc_sess.rate_limited_until = _now_ts() + 2
+            acc_sess.rate_limited_until = _now_ts() + 1
             return None
 
         # If reddit returns rate limit headers, adjust account behavior
@@ -239,8 +239,8 @@ class MultiAccountRedditFetcher:
 
         # handle HTTP status codes
         if resp.status_code == 429:
-            # Too Many Requests. increase rate-limited window and backoff.
-            backoff = 5 + random.random()*5
+            # Too Many Requests. reduce backoff time
+            backoff = 2 + random.random()*3  # reduced from 5-10s to 2-5s
             acc_sess.rate_limited_until = _now_ts() + backoff
             print(f"429 for account {acc_sess.index}, backing off {backoff:.1f}s")
             return None
@@ -278,7 +278,7 @@ class MultiAccountRedditFetcher:
             if resp is None:
                 # pick a different account and continue
                 account_idx = (account_idx + 1) % len(self.account_sessions)
-                time.sleep(0.05)  # tiny yield
+                time.sleep(0.02)  # reduced yield time
                 continue
             try:
                 data = resp.json()
@@ -299,7 +299,7 @@ class MultiAccountRedditFetcher:
             except Exception as e:
                 last_exception = e
                 account_idx = (account_idx + 1) % len(self.account_sessions)
-                time.sleep(0.05 + random.random()*0.1)
+                time.sleep(0.02 + random.random()*0.05)  # reduced retry delay
                 continue
         # all attempts failed
         raise Exception(f"fetch_posts_batch failed after {attempts} attempts: {last_exception}")
@@ -404,7 +404,7 @@ class MultiAccountRedditFetcher:
         if progress_callback:
             progress_callback(10, 100, 'Fetching comments')
 
-        max_workers = min(len(self.account_sessions) * 4, GLOBAL_MAX_WORKERS)
+        max_workers = min(len(self.account_sessions) * 8, GLOBAL_MAX_WORKERS)  # increased multiplier for faster processing
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
             futures = {}
             for i, post in enumerate(posts_to_process):
