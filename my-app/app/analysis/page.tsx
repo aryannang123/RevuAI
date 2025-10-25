@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Iridescence from "@/components/Iridescence";
 import GooeyNav from "@/components/GooeyNav";
+import GeminiChatbot from "@/components/GeminiChatbot";
 import { Pie, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -17,6 +18,7 @@ import {
 } from 'chart.js';
 
 interface SentimentData {
+  file?: string;
   ai_summary?: {
     paragraph_summary: string;
     model_used: string;
@@ -152,7 +154,7 @@ export default function AnalysisPage() {
       </div>
 
       {/* 🧊 Glass Navbar (Top Right) */}
-      <div className="absolute top-8 right-8 z-50">
+      <div className="absolute top-8 right-8 z-40">
         <div className="backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] px-8 py-2">
           <div
             style={{
@@ -175,6 +177,9 @@ export default function AnalysisPage() {
         </div>
       </div>
 
+      {/* 🤖 Gemini Chatbot - Floating Button */}
+      <GeminiChatbot sentimentData={sentimentData} searchQuery={searchQuery} />
+
       {/* 📊 Analysis Content */}
       <div className="container mx-auto px-6 py-20">
         <div className="max-w-4xl mx-auto">
@@ -188,8 +193,6 @@ export default function AnalysisPage() {
             </p>
           </div>
 
-
-
           {/* Top Charts Section */}
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             {/* Sentiment Distribution - Pie Chart */}
@@ -199,38 +202,66 @@ export default function AnalysisPage() {
                 <div className="h-64 flex items-center justify-center">
                   <Pie
                     data={{
-                      labels: Object.keys(sentimentData.summary || {}).map(key =>
-                        key.replace('_', ' ').split(' ').map(word =>
-                          word.charAt(0).toUpperCase() + word.slice(1)
-                        ).join(' ')
-                      ),
+                      labels: (() => {
+                        // Filter out neutral and rescale
+                        const filteredData = Object.entries(sentimentData.summary || {})
+                          .filter(([key]) => key !== 'neutral');
+                        
+                        return filteredData.map(([key]) =>
+                          key.replace('_', ' ').split(' ').map(word =>
+                            word.charAt(0).toUpperCase() + word.slice(1)
+                          ).join(' ')
+                        );
+                      })(),
                       datasets: [{
-                        data: Object.values(sentimentData.summary || {}),
-                        backgroundColor: Object.keys(sentimentData.summary || {}).map(sentiment => {
-                          if (sentiment === 'very_positive') return '#065F46'; // Dark green
-                          if (sentiment === 'positive') return '#10B981'; // Green
-                          if (sentiment === 'neutral') return '#F97316'; // Orange
-                          if (sentiment === 'negative') return '#EF4444'; // Red
-                          if (sentiment === 'very_negative') return '#7F1D1D'; // Dark red
-                          return '#9CA3AF'; // Fallback gray
-                        }),
-                        borderColor: Object.keys(sentimentData.summary || {}).map(sentiment => {
-                          if (sentiment === 'very_positive') return '#064E3B';
-                          if (sentiment === 'positive') return '#059669';
-                          if (sentiment === 'neutral') return '#EA580C';
-                          if (sentiment === 'negative') return '#DC2626';
-                          if (sentiment === 'very_negative') return '#450A0A';
-                          return '#6B7280';
-                        }),
+                        data: (() => {
+                          // Filter out neutral and rescale to 100%
+                          const filteredData = Object.entries(sentimentData.summary || {})
+                            .filter(([key]) => key !== 'neutral');
+                          
+                          const totalNonNeutral = filteredData.reduce((sum, [, value]) => sum + (value as number), 0);
+                          
+                          return filteredData.map(([, value]) => 
+                            totalNonNeutral > 0 ? ((value as number) / totalNonNeutral) * 100 : 0
+                          );
+                        })(),
+                        backgroundColor: (() => {
+                          const filteredKeys = Object.keys(sentimentData.summary || {})
+                            .filter(key => key !== 'neutral');
+                          
+                          return filteredKeys.map(sentiment => {
+                            if (sentiment === 'very_positive') return '#065F46'; // Dark green
+                            if (sentiment === 'positive') return '#10B981'; // Green
+                            if (sentiment === 'negative') return '#EF4444'; // Red
+                            if (sentiment === 'very_negative') return '#7F1D1D'; // Dark red
+                            return '#9CA3AF'; // Fallback gray
+                          });
+                        })(),
+                        borderColor: (() => {
+                          const filteredKeys = Object.keys(sentimentData.summary || {})
+                            .filter(key => key !== 'neutral');
+                          
+                          return filteredKeys.map(sentiment => {
+                            if (sentiment === 'very_positive') return '#064E3B';
+                            if (sentiment === 'positive') return '#059669';
+                            if (sentiment === 'negative') return '#DC2626';
+                            if (sentiment === 'very_negative') return '#450A0A';
+                            return '#6B7280';
+                          });
+                        })(),
                         borderWidth: 2,
-                        hoverBackgroundColor: Object.keys(sentimentData.summary || {}).map(sentiment => {
-                          if (sentiment === 'very_positive') return '#064E3B';
-                          if (sentiment === 'positive') return '#059669';
-                          if (sentiment === 'neutral') return '#EA580C';
-                          if (sentiment === 'negative') return '#DC2626';
-                          if (sentiment === 'very_negative') return '#450A0A';
-                          return '#6B7280';
-                        }),
+                        hoverBackgroundColor: (() => {
+                          const filteredKeys = Object.keys(sentimentData.summary || {})
+                            .filter(key => key !== 'neutral');
+                          
+                          return filteredKeys.map(sentiment => {
+                            if (sentiment === 'very_positive') return '#064E3B';
+                            if (sentiment === 'positive') return '#059669';
+                            if (sentiment === 'negative') return '#DC2626';
+                            if (sentiment === 'very_negative') return '#450A0A';
+                            return '#6B7280';
+                          });
+                        })(),
                       }]
                     }}
                     options={{
@@ -275,39 +306,63 @@ export default function AnalysisPage() {
                 <div className="h-64 flex items-center justify-center">
                   <Bar
                     data={{
-                      labels: Object.keys(sentimentData.dominant_emotion || {}).map(emotion => {
-                        const emoji = emotion === 'joy' ? '😊' :
-                          emotion === 'anger' ? '😠' :
-                            emotion === 'sadness' ? '😢' :
-                              emotion === 'fear' ? '😨' :
-                                emotion === 'surprise' ? '😲' :
-                                  emotion === 'disgust' ? '🤢' :
-                                    '😐';
-                        return `${emoji} ${emotion.charAt(0).toUpperCase() + emotion.slice(1)}`;
-                      }),
+                      labels: (() => {
+                        // Filter out neutral emotions and rescale
+                        const filteredEmotions = Object.entries(sentimentData.dominant_emotion || {})
+                          .filter(([emotion]) => emotion !== 'neutral');
+                        
+                        return filteredEmotions.map(([emotion]) => {
+                          const emoji = emotion === 'joy' ? '😊' :
+                            emotion === 'anger' ? '😠' :
+                              emotion === 'sadness' ? '😢' :
+                                emotion === 'fear' ? '😨' :
+                                  emotion === 'surprise' ? '😲' :
+                                    emotion === 'disgust' ? '🤢' :
+                                      '😐';
+                          return `${emoji} ${emotion.charAt(0).toUpperCase() + emotion.slice(1)}`;
+                        });
+                      })(),
                       datasets: [{
                         label: 'Emotion %',
-                        data: Object.values(sentimentData.dominant_emotion || {}),
-                        backgroundColor: Object.keys(sentimentData.dominant_emotion || {}).map(emotion => {
-                          if (emotion === 'joy') return '#10B981'; // Green
-                          if (emotion === 'anger') return '#EF4444'; // Red
-                          if (emotion === 'sadness') return '#3B82F6'; // Blue
-                          if (emotion === 'fear') return '#8B5CF6'; // Purple
-                          if (emotion === 'surprise') return '#F59E0B'; // Yellow
-                          if (emotion === 'disgust') return '#84CC16'; // Lime
-                          if (emotion === 'neutral') return '#6B7280'; // Gray
-                          return '#9CA3AF'; // Fallback
-                        }),
-                        borderColor: Object.keys(sentimentData.dominant_emotion || {}).map(emotion => {
-                          if (emotion === 'joy') return '#059669';
-                          if (emotion === 'anger') return '#DC2626';
-                          if (emotion === 'sadness') return '#2563EB';
-                          if (emotion === 'fear') return '#7C3AED';
-                          if (emotion === 'surprise') return '#D97706';
-                          if (emotion === 'disgust') return '#65A30D';
-                          if (emotion === 'neutral') return '#4B5563';
-                          return '#6B7280';
-                        }),
+                        data: (() => {
+                          // Filter out neutral and rescale to 100%
+                          const filteredEmotions = Object.entries(sentimentData.dominant_emotion || {})
+                            .filter(([emotion]) => emotion !== 'neutral');
+                          
+                          const totalNonNeutral = filteredEmotions.reduce((sum, [, value]) => sum + (value as number), 0);
+                          
+                          return filteredEmotions.map(([, value]) => 
+                            totalNonNeutral > 0 ? ((value as number) / totalNonNeutral) * 100 : 0
+                          );
+                        })(),
+                        backgroundColor: (() => {
+                          const filteredEmotions = Object.keys(sentimentData.dominant_emotion || {})
+                            .filter(emotion => emotion !== 'neutral');
+                          
+                          return filteredEmotions.map(emotion => {
+                            if (emotion === 'joy') return '#10B981'; // Green
+                            if (emotion === 'anger') return '#EF4444'; // Red
+                            if (emotion === 'sadness') return '#3B82F6'; // Blue
+                            if (emotion === 'fear') return '#8B5CF6'; // Purple
+                            if (emotion === 'surprise') return '#F59E0B'; // Yellow
+                            if (emotion === 'disgust') return '#84CC16'; // Lime
+                            return '#9CA3AF'; // Fallback
+                          });
+                        })(),
+                        borderColor: (() => {
+                          const filteredEmotions = Object.keys(sentimentData.dominant_emotion || {})
+                            .filter(emotion => emotion !== 'neutral');
+                          
+                          return filteredEmotions.map(emotion => {
+                            if (emotion === 'joy') return '#059669';
+                            if (emotion === 'anger') return '#DC2626';
+                            if (emotion === 'sadness') return '#2563EB';
+                            if (emotion === 'fear') return '#7C3AED';
+                            if (emotion === 'surprise') return '#D97706';
+                            if (emotion === 'disgust') return '#65A30D';
+                            return '#6B7280';
+                          });
+                        })(),
                         borderWidth: 1,
                         borderRadius: 4,
                       }]
@@ -341,7 +396,7 @@ export default function AnalysisPage() {
                           ticks: {
                             color: '#F3F4F6',
                             stepSize: 20,
-                            callback: function(value) {
+                            callback: function (value) {
                               return value + '%';
                             }
                           },
@@ -368,115 +423,68 @@ export default function AnalysisPage() {
             )}
           </div>
 
-          {/* Bottom Charts Section */}
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            {/* Confidence Metrics Histogram */}
-            {sentimentData?.confidence_breakdown ? (
-              <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4">Confidence Distribution</h3>
-                <div className="h-64 flex items-center justify-center">
-                  <Bar
-                    data={{
-                      labels: Object.keys(sentimentData.confidence_breakdown),
-                      datasets: [{
-                        label: 'Percentage of Comments',
-                        data: Object.values(sentimentData.confidence_breakdown),
-                        backgroundColor: '#3B82F6',
-                        borderColor: '#2563EB',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                      }]
-                    }}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          display: false
-                        },
-                        tooltip: {
-                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                          titleColor: '#F3F4F6',
-                          bodyColor: '#F3F4F6',
-                          borderColor: 'rgba(255, 255, 255, 0.2)',
-                          borderWidth: 1,
-                          callbacks: {
-                            label: function (context) {
-                              const value = context.parsed.y;
-                              return `${value?.toFixed(1) || 0}% of comments`;
-                            }
-                          }
-                        }
-                      },
-                      scales: {
-                        x: {
-                          ticks: {
-                            color: '#F3F4F6',
-                            font: {
-                              size: 10
-                            }
-                          },
-                          grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                          },
-                          title: {
-                            display: true,
-                            text: 'Confidence Range',
-                            color: '#F3F4F6'
-                          }
-                        },
-                        y: {
-                          beginAtZero: true,
-                          ticks: {
-                            color: '#F3F4F6',
-                            stepSize: 1
-                          },
-                          grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                          },
-                          title: {
-                            display: true,
-                            text: 'Percentage of Comments',
-                            color: '#F3F4F6'
-                          }
-                        }
-                      }
-                    } as ChartOptions<'bar'>}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4">Confidence Distribution</h3>
-                <div className="h-64 flex items-center justify-center text-white/70">
-                  <p>Confidence data not available</p>
-                </div>
-              </div>
-            )}
-
-            {/* Empty space to maintain grid balance */}
-            <div></div>
-          </div>
-
-          {/* AI Summary Section - Moved Below */}
+          {/* AI Summary Section */}
           {sentimentData?.ai_summary?.paragraph_summary && (
             <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-8 mb-8 shadow-2xl">
               <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-                🤖 AI Summary
+                🤖 AI Analysis Summary
               </h2>
-              <div className="text-white/90 leading-relaxed text-lg">
-                {sentimentData.ai_summary.paragraph_summary
-                  .split(/(?:\d+\.|\•|\-)\s+/)
-                  .filter(point => point.trim().length > 0)
-                  .map((point, index) => (
-                    <div key={index} className="mb-4 flex items-start gap-3">
-                      <div className="w-2 h-2 bg-cyan-400 rounded-full mt-3 flex-shrink-0"></div>
-                      <div className="text-white/90">{point.trim()}</div>
+              <div className="space-y-4">
+                {(() => {
+                  const summary = sentimentData.ai_summary.paragraph_summary;
+
+                  // Split by common bullet point patterns and clean up
+                  const points = summary
+                    .split(/(?:\d+\.|\•|\-|\.)\s+/)
+                    .map(point => point.trim())
+                    .filter(point => point.length > 20) // Filter out very short fragments
+                    .slice(0, 8); // Limit to 8 key points
+
+                  return points.map((point, index) => (
+                    <div key={index} className="flex items-start gap-4 p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
+                      <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-white/90 leading-relaxed text-base">
+                          {point.replace(/^[^\w]*/, '').trim()}
+                        </p>
+                      </div>
                     </div>
-                  ))}
+                  ));
+                })()}
               </div>
-              <div className="mt-6 text-white/60 text-sm border-t border-white/10 pt-4">
-                Generated by {sentimentData.ai_summary?.model_used} • {new Date(sentimentData.ai_summary?.generated_at || '').toLocaleString()}
+
+              {/* Summary Stats */}
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                  <div className="text-cyan-400 text-sm font-medium">Overall Sentiment</div>
+                  <div className="text-white text-xl font-bold capitalize">
+                    {sentimentData.overall_sentiment?.replace('_', ' ')}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                  <div className="text-cyan-400 text-sm font-medium">Comments Analyzed</div>
+                  <div className="text-white text-xl font-bold">
+                    {sentimentData.total_analyzed?.toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                  <div className="text-cyan-400 text-sm font-medium">Dominant Emotion</div>
+                  <div className="text-white text-xl font-bold capitalize">
+                    {sentimentData.dominant_emotion ?
+                      Object.entries(sentimentData.dominant_emotion)
+                        .filter(([key]) => key !== 'neutral')
+                        .sort(([, a], [, b]) => (b as number) - (a as number))[0]?.[0] || 'N/A'
+                      : 'N/A'
+                    }
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 text-white/60 text-sm border-t border-white/10 pt-4 flex items-center justify-between">
+                <span>Generated by {sentimentData.ai_summary?.model_used}</span>
+                <span>{new Date(sentimentData.ai_summary?.generated_at || '').toLocaleString()}</span>
               </div>
             </div>
           )}

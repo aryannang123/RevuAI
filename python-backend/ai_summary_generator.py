@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 AI Summary Generator using Google Gemini 2.5 Flash
-Now with separate Positive & Negative insight sections,
-and 75% Gemini reasoning / 25% data grounding.
+Features:
+- Proper API key rotation across 4 accounts
+- Session-based caching for efficiency
+- Both structured summaries and conversational responses
 """
 
 import json
@@ -22,7 +24,7 @@ load_dotenv()
 
 class AISummaryGenerator:
     def __init__(self):
-        """Initialize Gemini 2.5 Flash with multiple API keys for scaling"""
+        """Initialize Gemini 2.5 Flash with multiple API keys for load balancing"""
         print("🚀 Initializing Multi-Account Gemini Summary Generator...")
 
         if not GEMINI_AVAILABLE:
@@ -47,15 +49,22 @@ class AISummaryGenerator:
         if not self.models:
             raise ValueError("❌ No Gemini models initialized!")
 
+        # ✅ IMPORTANT: Start at 0 for proper rotation
         self.current_model_index = 0
         print(f"✅ {len(self.models)} active Gemini account(s) ready.")
+        print(f"🔄 API rotation enabled (starting at index 0)")
 
+    # ================================================================
+    # 🔹 Utility Functions
+    # ================================================================
     def _load_gemini_keys(self):
         """Load all available Gemini API keys from environment"""
         keys = []
+        # Load primary key
         if os.getenv('GEMINI_API_KEY') and not os.getenv('GEMINI_API_KEY').startswith('your_'):
             keys.append(os.getenv('GEMINI_API_KEY'))
 
+        # Load additional keys (GEMINI_API_KEY_1, GEMINI_API_KEY_2, etc.)
         i = 1
         while True:
             k = os.getenv(f'GEMINI_API_KEY_{i}')
@@ -66,13 +75,85 @@ class AISummaryGenerator:
         return keys
 
     def _get_next_model(self):
-        """Rotate between API accounts"""
+        """
+        ✅ FIXED: Proper round-robin rotation between API accounts
+        Returns next model and advances index
+        """
+        if not self.models:
+            raise ValueError("No Gemini models available!")
+        
+        # Get current model
         model = self.models[self.current_model_index]
+        
+        # Advance to next model (circular rotation)
         self.current_model_index = (self.current_model_index + 1) % len(self.models)
+        
+        print(f"🎯 Selected: Account {model['account']} (Next will be Account {self.models[self.current_model_index]['account']})")
+        
         return model
 
     # ================================================================
-    # 🔹 MAIN FUNCTION
+    # 🔹 NEW: General-purpose Chat Response Generator
+    # ================================================================
+    def generate_response(self, prompt: str, max_retries: int = None) -> str:
+        """
+        Generate a natural language response using Gemini with automatic API rotation.
+        
+        Args:
+            prompt: The prompt to send to Gemini
+            max_retries: Max number of API keys to try (default: all available)
+        
+        Returns:
+            Generated response text or error message
+        """
+        if max_retries is None:
+            max_retries = len(self.models)
+        
+        print(f"\n🧠 [GeminiChat] Generating conversational response...")
+        print(f"   Prompt length: {len(prompt)} chars")
+        print(f"   Starting with API index: {self.current_model_index}")
+        print(f"   Available API keys: {len(self.models)}")
+
+        attempts = 0
+        last_error = None
+
+        # Try up to max_retries different API keys
+        for attempt in range(max_retries):
+            attempts += 1
+            model_info = self._get_next_model()
+            
+            try:
+                print(f"🔄 Attempt {attempts}/{max_retries}: Using Account {model_info['account']}")
+                
+                # Generate content
+                result = model_info['model'].generate_content(prompt)
+                
+                if hasattr(result, "text") and result.text:
+                    print(f"✅ SUCCESS on Account {model_info['account']}")
+                    print(f"   Response length: {len(result.text)} chars")
+                    print(f"   Next API will be: Account {self.models[self.current_model_index]['account']}")
+                    return result.text.strip()
+                else:
+                    print(f"⚠️ Empty response from Account {model_info['account']}")
+                    last_error = "Empty response"
+                    
+            except Exception as e:
+                error_msg = str(e)
+                print(f"❌ Account {model_info['account']} failed: {error_msg[:100]}")
+                last_error = error_msg
+                
+                # Check if it's a rate limit error
+                if "429" in error_msg or "quota" in error_msg.lower():
+                    print(f"   → Rate limited, trying next account...")
+                continue
+
+        # All attempts failed
+        print(f"❌ All {attempts} API key(s) failed to generate a response")
+        print(f"   Last error: {last_error}")
+        return "⚠️ Gemini service temporarily unavailable. All API keys exhausted. Please try again in a moment."
+
+    # ================================================================
+    # 🔹 Structured Summary Generator (existing)
     # ================================================================
     def generate_paragraph_summary(self, sentiment_data, query):
         """Generate a concise summary with separate positive and negative insights"""
@@ -96,33 +177,28 @@ class AISummaryGenerator:
         )
 
         print("🔥 Generating Gemini reasoning-based summary...")
+        print(f"   Using API rotation (current index: {self.current_model_index})")
 
-        summary = ""
-        for _ in range(len(self.models)):
-            model_info = self._get_next_model()
-            try:
-                print(f"🎯 Using Gemini Account {model_info['account']}")
-                response = model_info['model'].generate_content(prompt)
-                summary = response.text.strip()
-                print(f"✅ Success (Account {model_info['account']})")
-                break
-            except Exception as e:
-                print(f"⚠️ Account {model_info['account']} failed: {e}")
-                continue
-
-        summary = self._clean_summary(summary)
+        # Use the same rotation logic
+        summary = self.generate_response(prompt)
+        
+        if summary.startswith("⚠️"):
+            print("⚠️ Summary generation failed")
+        else:
+            summary = self._clean_summary(summary)
 
         return {
             'paragraph_summary': summary,
             'generated_at': datetime.now().isoformat(),
             'model_used': 'google/gemini-2.5-flash',
-            'analysis_method': 'gemini_reasoning_75pct_brain',
+            'analysis_method': 'gemini_reasoning_multi_account',
             'comments_analyzed': len(top_positive_comments) + len(top_negative_comments),
-            'key_insights': insights
+            'key_insights': insights,
+            'api_accounts_available': len(self.models)
         }
 
     # ================================================================
-    # 🔹 INSIGHT EXTRACTION
+    # 🔹 Insight Extraction Helpers
     # ================================================================
     def _extract_insights(self, positive_comments, negative_comments, query):
         """Extract recurring themes and issues"""
@@ -160,7 +236,7 @@ class AISummaryGenerator:
         return insights
 
     # ================================================================
-    # 🔹 PROMPT (Positive + Negative Sections)
+    # 🔹 Prompt Construction for Summaries
     # ================================================================
     def _create_gemini_prompt(self, query, total_comments, sentiment_breakdown, raw_counts,
                               overall_sentiment, insights, positive_comments, negative_comments):
@@ -186,8 +262,8 @@ The stakeholder will also be viewing pie charts and bar graphs that show the *pe
 - Overall Sentiment: {overall_sentiment.title()}
 
 **Key Insights:**
-- Positive Themes: {', '.join(insights['positive_themes'])}
-- User Concerns: {', '.join(insights['user_concerns'])}
+- Positive Themes: {', '.join(insights['positive_themes']) if insights['positive_themes'] else 'None identified'}
+- User Concerns: {', '.join(insights['user_concerns']) if insights['user_concerns'] else 'None identified'}
 
 **Sample Comments:**
 Positive:
@@ -200,20 +276,20 @@ Negative:
 
 **Instructions for the Summary:**
 
-1.  **Start with an "Overall Sentiment"**: Give a 1-2 sentence high-level overview. (e.g., "Public sentiment for the {query} is largely positive, driven by strong appreciation for its new features, though there are notable concerns about its price.")
-2.  **Positive Highlights**: In a bulleted list, summarize the 2-3 main themes people *love*. What specific features or aspects are praised?
-3.  **Negative Pain Points**: In a bulleted list, summarize the 2-3 most common *complaints* or *problems*. What is driving the negative feedback?
-4.  **Mixed & Neutral Observations**: Briefly mention any common themes from the mixed/neutral comments. This often includes feature requests, points of confusion, or "it's good, but..." statements.
+1.  **Start with an "Overall Sentiment"**: Give a 1-2 sentence high-level overview.
+2.  **Positive Highlights**: In a bulleted list, summarize the 2-3 main themes people *love*.
+3.  **Negative Pain Points**: In a bulleted list, summarize the 2-3 most common complaints.
+4.  **Mixed & Neutral Observations**: Briefly mention any common neutral themes.
 
-Keep the language clear, professional, and directly actionable.
-remove all unnecessary words like here is the summary
+Keep the language clear, professional, and actionable. Limit to 150-200 words.
 """
         return prompt
 
     # ================================================================
-    # 🔹 CLEAN SUMMARY
+    # 🔹 Clean-up Helper
     # ================================================================
     def _clean_summary(self, summary):
+        """Clean and format the summary text"""
         cleaned = summary.replace("**", "").replace("*", "").replace("#", "").strip()
         lines = [l.strip() for l in cleaned.split('\n') if l.strip()]
         formatted = []
@@ -228,21 +304,26 @@ remove all unnecessary words like here is the summary
 
 
 # ================================================================
-# 🔹 TEST FUNCTION
+# 🔹 Manual Test
 # ================================================================
-def test_gemini_power():
+def test_gemini_rotation():
+    """Test API key rotation"""
     generator = AISummaryGenerator()
-    with open('pre-process/sentiment_samsung_s24_1761241395.json', 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
-    print("🔥 Testing Gemini 2.5 Flash (75% Reasoning, Split Insights)...")
-    result = generator.generate_paragraph_summary(data, "Samsung S24")
-
-    print(f"\n⚡ Gemini Summary:\n{result['paragraph_summary']}")
-    print(f"\n📊 Model: {result['model_used']}")
-    print(f"💬 Comments Analyzed: {result['comments_analyzed']}")
-    print(f"🧠 Method: {result['analysis_method']}")
+    
+    print("\n" + "="*60)
+    print("🧪 Testing API Key Rotation")
+    print("="*60)
+    
+    # Test 5 requests to see rotation
+    for i in range(5):
+        print(f"\n--- Request {i+1} ---")
+        response = generator.generate_response(f"Test message {i+1}: What is 2+2?")
+        print(f"Response: {response[:100]}...")
+        print(f"Current index after request: {generator.current_model_index}")
+    
+    print("\n" + "="*60)
+    print("✅ Rotation test complete!")
 
 
 if __name__ == "__main__":
-    test_gemini_power()
+    test_gemini_rotation()
