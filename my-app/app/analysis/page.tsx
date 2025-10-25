@@ -41,25 +41,33 @@ export default function AnalysisPage() {
   if (loading || !sentimentData) {
     return (
       <main className="relative h-screen w-full flex items-center justify-center overflow-hidden text-white">
-        <Iridescence
-          color={[0.4, 0.6, 1]}
-          mouseReact={false}
-          amplitude={0.1}
-          speed={1.0}
-        />
+        {/* 🪩 Iridescent Background */}
+        <div className="fixed top-0 left-0 w-screen h-screen -z-10">
+  <Iridescence
+    color={[0.4, 0.6, 1]}
+    mouseReact={false}
+    amplitude={0.1}
+    speed={1.0}
+  />
+</div>
+
+
+        {/* Loader */}
         <div className="relative text-center z-10">
           <div className="w-20 h-20 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-          <p className="text-white text-2xl font-semibold">Analyzing sentiments...</p>
+          <p className="text-white text-2xl font-semibold">
+            Analyzing sentiments...
+          </p>
           <p className="text-cyan-300 mt-2">Processing with AI models</p>
         </div>
       </main>
     );
   }
 
-  // ✅ Displayed after loading finishes — buttons on top-right
+  // ✅ After Loading — Display Buttons (top-right)
   return (
     <main className="relative h-screen w-full overflow-hidden text-white">
-      {/* 🌈 Iridescent Background */}
+      {/* 🪩 Iridescent Background */}
       <div className="absolute inset-0 -z-10">
         <Iridescence
           color={[0.4, 0.6, 1]}
@@ -69,8 +77,8 @@ export default function AnalysisPage() {
         />
       </div>
 
-      {/* 🧊 Top-right Glass Buttons */}
-      <div className="absolute top-6 right-8 z-20 flex gap-4 animate-fade-in">
+      {/* 🧊 Top-Right Buttons */}
+      <div className="absolute top-6 right-8 z-50 flex gap-4 animate-fade-in">
         <button className="px-6 py-2 rounded-2xl bg-white/15 backdrop-blur-xl border border-white/30 text-white font-semibold shadow-[0_0_25px_rgba(255,255,255,0.15)] hover:bg-white/25 hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] transition-all duration-300">
           Consumer
         </button>
@@ -79,8 +87,8 @@ export default function AnalysisPage() {
         </button>
       </div>
 
-      {/* Center message or space for future content */}
-      <div className="h-full flex items-center justify-center text-4xl font-bold text-white/80 animate-fade-in">
+      {/* Optional Text in Center */}
+      <div className="h-full flex items-center justify-center text-4xl font-bold text-white/85 animate-fade-in">
         Choose Your Portal
       </div>
 
