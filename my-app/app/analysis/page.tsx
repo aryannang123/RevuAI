@@ -127,8 +127,8 @@ export default function AnalysisPage() {
 
   // ✅ After Loading
   const items = [
-    { label: "Consumer", href: "#" },
-    { label: "Developer", href: "./dev_analysis" },
+    ,
+    { label: "Generate Sugesstions for developers", href: "./dev_analysis" },
   ];
 
   return (

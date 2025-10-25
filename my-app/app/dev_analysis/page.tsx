@@ -7,8 +7,8 @@ import GooeyNav from "@/components/GooeyNav";
 export default function DevAnalysisPage() {
   // Items for your GooeyNav (the same as the image)
   const items = [
-    { label: "Consumer", href: "/analysis" },
-    { label: "Developer", href: "/dev_analysis" },
+    { label: "← Back to analysis", href: "/analysis" },
+    
   ];
 
   return (
@@ -24,7 +24,7 @@ export default function DevAnalysisPage() {
       </div>
 
       {/* 🧊 Glass Nav Bar (Top Right) */}
-      <div className="absolute top-8 right-8 z-50">
+      <div className="absolute top-8 left-8 z-50">
         <div className="backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] px-8 py-2">
           <div style={{ height: "40px", position: "relative", width: "auto" }}>
             <GooeyNav
