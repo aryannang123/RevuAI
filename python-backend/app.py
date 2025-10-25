@@ -78,6 +78,46 @@ def fetch_mass_comments():
             progress_callback=progress_callback
         )
         
+        # Automatically run enhanced sentiment analysis on the fetched data
+        print(f"\n🎭 Running automatic enhanced sentiment analysis...")
+        try:
+            from enhanced_sentiment_analyzer import EnhancedSentimentAnalyzer
+            
+            # Create temporary file path for the fetched data
+            timestamp = int(datetime.now().timestamp())
+            temp_reddit_file = f"pre-process/reddit_{query.replace(' ', '_')}_{timestamp}.json"
+            
+            # Save the Reddit data temporarily
+            with open(temp_reddit_file, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
+            
+            # Run enhanced sentiment analysis
+            analyzer = EnhancedSentimentAnalyzer()
+            sentiment_result = analyzer.analyze_json_file(temp_reddit_file)
+            
+            if sentiment_result:
+                # Save enhanced sentiment analysis
+                sentiment_file = f"pre-process/enhanced_sentiment_{query.replace(' ', '_')}_{timestamp}.json"
+                with open(sentiment_file, 'w', encoding='utf-8') as f:
+                    json.dump(sentiment_result, f, indent=2, ensure_ascii=False)
+                
+                print(f"✅ Enhanced sentiment analysis saved to: {sentiment_file}")
+                
+                # Add sentiment summary to the result
+                result['sentiment_analysis'] = {
+                    'file': sentiment_file,
+                    'summary': sentiment_result['sentiment_breakdown_5class'],
+                    'overall_sentiment': sentiment_result['overall_sentiment'],
+                    'dominant_emotion': sentiment_result.get('emotion_breakdown', {})
+                }
+            else:
+                print("⚠️ Enhanced sentiment analysis failed")
+                
+        except Exception as e:
+            print(f"⚠️ Enhanced sentiment analysis error: {e}")
+            import traceback
+            traceback.print_exc()
+        
         # Save Reddit data to file
         timestamp = int(datetime.now().timestamp())
         reddit_file = f"pre-process/reddit_{query.replace(' ', '_')}_{timestamp}.json"
@@ -110,15 +150,19 @@ def fetch_mass_comments():
 @app.route("/api/sentiment/latest", methods=["GET"])
 def get_latest_sentiment():
     """
-    Get the latest sentiment analysis file
+    Get the latest enhanced sentiment analysis file
     """
     try:
-        files = glob.glob("pre-process/sentiment_*.json")
-        
-        if not files:
-            return jsonify({"error": "No sentiment files found"}), 404
-        
-        latest_file = max(files, key=os.path.getctime)
+        # Prioritize enhanced sentiment files
+        enhanced_files = glob.glob("pre-process/enhanced_sentiment_*.json")
+        if enhanced_files:
+            latest_file = max(enhanced_files, key=os.path.getctime)
+        else:
+            # Fallback to regular sentiment files
+            files = glob.glob("pre-process/sentiment_*.json")
+            if not files:
+                return jsonify({"error": "No sentiment files found"}), 404
+            latest_file = max(files, key=os.path.getctime)
         
         with open(latest_file, "r", encoding="utf-8") as f:
             data = json.load(f)
