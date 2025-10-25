@@ -24,6 +24,9 @@ const getCurrentUser = async () => {
   }
 };
 
+// 🌈 Define the color array outside the component to prevent re-renders
+const IRIDESCENCE_COLOR = [0.3, 0.6, 1];
+
 export default function Home() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -128,7 +131,7 @@ export default function Home() {
         {/* 🌈 Iridescent Background */}
         <div className="absolute inset-0 -z-20">
           <Iridescence
-            color={[0.3, 0.6, 1]}
+            color={IRIDESCENCE_COLOR}
             mouseReact={false}
             amplitude={0.1}
             speed={1.0}
