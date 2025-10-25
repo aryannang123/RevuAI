@@ -84,8 +84,8 @@ export default function Home() {
 
   const items = [
     { label: "Home", href: "#" },
-    { label: "About", href: "#" },
-    { label: "Contact", href: "#" },
+    { label: "About", href: "./about" },
+    { label: "Contact", href: "./contact" },
   ];
 
   return (
