@@ -196,7 +196,7 @@ const GeminiChatbot: React.FC<GeminiChatbotProps> = ({ sentimentData, searchQuer
                 <MessageCircle className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 className="text-white font-bold text-lg">Gemini AI</h3>
+                <h3 className="text-white font-bold text-lg">Rev AI</h3>
                 <p className="text-white/80 text-xs flex items-center gap-1">
                   <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
                   API Key {apiKeyIndex + 1} • Session Active
