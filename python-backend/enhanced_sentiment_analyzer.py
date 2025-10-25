@@ -184,6 +184,22 @@ class EnhancedSentimentAnalyzer:
             
             emotion_percentages = {k: (v/total_analyzed)*100 for k, v in emotion_counts.items()}
             
+            # Confidence breakdown (10 bins from 0.0-1.0) - Using Emotion Confidence
+            confidence_bins = {
+                '0.0-0.1': 0, '0.1-0.2': 0, '0.2-0.3': 0, '0.3-0.4': 0, '0.4-0.5': 0,
+                '0.5-0.6': 0, '0.6-0.7': 0, '0.7-0.8': 0, '0.8-0.9': 0, '0.9-1.0': 0
+            }
+            
+            for comment in analyzed_comments:
+                # Use emotion confidence for the confidence breakdown
+                emotion_confidence = comment['emotion']['confidence']
+                bin_index = min(int(emotion_confidence * 10), 9)  # Ensure max index is 9
+                bin_keys = list(confidence_bins.keys())
+                confidence_bins[bin_keys[bin_index]] += 1
+            
+            # Convert confidence counts to percentages
+            confidence_percentages = {k: (v/total_analyzed)*100 for k, v in confidence_bins.items()}
+            
             # Get top comments by category
             top_very_positive = sorted(
                 [c for c in analyzed_comments if c['sentiment'] == 'very_positive'], 
@@ -206,9 +222,11 @@ class EnhancedSentimentAnalyzer:
                 'model_used': 'j-hartmann/emotion-english-distilroberta-base',
                 'sentiment_breakdown_5class': sentiment_percentages,
                 'emotion_breakdown': emotion_percentages,
+                'confidence_breakdown': confidence_percentages,
                 'raw_counts': {
                     'sentiment': dict(sentiment_counts),
-                    'emotion': dict(emotion_counts)
+                    'emotion': dict(emotion_counts),
+                    'confidence': dict(confidence_bins)
                 },
                 'overall_sentiment': dominant_sentiment,
                 'confidence': round(sentiment_percentages[dominant_sentiment], 2),
@@ -273,6 +291,16 @@ class EnhancedSentimentAnalyzer:
             
             dominant_emotion = max(emotion_percentages, key=emotion_percentages.get)
             print(f"\n😊 Dominant emotion: {dominant_emotion} ({emotion_percentages[dominant_emotion]:.1f}%)")
+            
+            # Show emotion confidence distribution summary
+            high_confidence = confidence_percentages.get('0.8-0.9', 0) + confidence_percentages.get('0.9-1.0', 0)
+            medium_confidence = confidence_percentages.get('0.6-0.7', 0) + confidence_percentages.get('0.7-0.8', 0)
+            low_confidence = sum(confidence_percentages.get(k, 0) for k in ['0.0-0.1', '0.1-0.2', '0.2-0.3', '0.3-0.4', '0.4-0.5', '0.5-0.6'])
+            
+            print(f"\n📊 Emotion Confidence Distribution:")
+            print(f"   High (0.8-1.0):   {high_confidence:.1f}%")
+            print(f"   Medium (0.6-0.8): {medium_confidence:.1f}%") 
+            print(f"   Low (0.0-0.6):    {low_confidence:.1f}%")
             print(f"{'='*60}\n")
             
             return analysis_result

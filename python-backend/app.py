@@ -118,6 +118,7 @@ def fetch_mass_comments():
                     'summary': sentiment_result['sentiment_breakdown_5class'],
                     'overall_sentiment': sentiment_result['overall_sentiment'],
                     'dominant_emotion': sentiment_result.get('emotion_breakdown', {}),
+                    'confidence_breakdown': sentiment_result.get('confidence_breakdown', {}),
                     'ai_summary': sentiment_result.get('ai_summary', {}),
                     'top_comments': sentiment_result.get('top_comments', {}),
                     'total_analyzed': sentiment_result.get('total_comments_analyzed', 0)
