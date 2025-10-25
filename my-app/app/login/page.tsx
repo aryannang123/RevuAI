@@ -4,14 +4,13 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithGoogle, testConnection } from "@/lib/auth";
 import { Brain, LogIn } from "lucide-react";
-import Iridescence from "@/components/Iridescence"; // ✅ your installed component
+import Iridescence from "@/components/Iridescence"; // ✅ your installed shader component
 
 export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ Check backend connection
   useEffect(() => {
     const checkConnection = async () => {
       const result = await testConnection();
@@ -31,13 +30,21 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative min-h-screen w-full overflow-hidden bg-black">
-      {/* ✅ Iridescence Background */}
+    <main className="relative min-h-screen w-full overflow-hidden">
+      {/* ✨ Iridescent Animated Background */}
       <div className="absolute inset-0 -z-10">
-        <Iridescence color={[0.5, 0.6, 0.8]} mouseReact={false} amplitude={0.1} speed={1.0} />
+        <Iridescence
+          color={[1.2, 1.0, 1.4]} // brighter glow
+          mouseReact={false}
+          amplitude={0.15}
+          speed={1.0}
+        />
       </div>
 
-      {/* Optional accent glows */}
+      {/* 🌈 Gradient fallback (in case WebGL fails) */}
+      <div className="absolute inset-0 bg-gradient-to-br from-cyan-900 via-purple-900 to-black -z-20" />
+
+      {/* Floating accent glows */}
       <div className="absolute top-20 left-20 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" />
       <div
         className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse"
@@ -57,7 +64,7 @@ export default function LoginPage() {
         </a>
       </nav>
 
-      {/* ✨ Glassmorphic Login Card */}
+      {/* 💎 Glassmorphic Login Card */}
       <div className="relative z-10 flex items-center justify-center min-h-screen px-6">
         <div className="relative bg-white/10 backdrop-blur-3xl border border-cyan-400/30 rounded-3xl shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)] p-10 w-full max-w-md text-center animate-fade-in before:absolute before:inset-0 before:rounded-3xl before:p-[1px] before:bg-gradient-to-r before:from-cyan-400/50 before:to-purple-500/50 before:-z-10 before:blur-[1px]">
           <div className="flex items-center justify-center mb-6">
@@ -96,7 +103,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Animations */}
+      {/* ✨ Animations */}
       <style jsx>{`
         @keyframes fade-in {
           from {
@@ -109,7 +116,8 @@ export default function LoginPage() {
           }
         }
         @keyframes gradient {
-          0%, 100% {
+          0%,
+          100% {
             background-position: 0% 50%;
           }
           50% {

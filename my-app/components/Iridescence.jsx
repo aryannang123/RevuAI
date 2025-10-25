@@ -55,7 +55,7 @@ export default function Iridescence({ color = [0.5, 0.6, 0.8], speed = 1.0, ampl
     const ctn = ctnDom.current;
     const renderer = new Renderer();
     const gl = renderer.gl;
-    gl.clearColor(1, 1, 1, 1);
+    gl.clearColor(0, 0, 0, 0);
 
     let program;
 
