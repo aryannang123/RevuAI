@@ -90,8 +90,8 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: searchTerm,
-          target_comments: 10000,
-          min_score: 5,
+          target_comments: 2000,  // Optimized for speed and quality
+          min_score: 2,           // Lower score threshold for more comments
         }),
       });
       if (!response.ok) throw new Error("Failed to fetch Reddit data");

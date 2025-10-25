@@ -55,7 +55,7 @@ def fetch_mass_comments():
             return jsonify({"error": "Query is required"}), 400
         
         query = data["query"]
-        target_comments = data.get("target_comments", 10000)
+        target_comments = data.get("target_comments", 2000)
         min_score = data.get("min_score", 5)
         
         print(f"\n{'='*60}")

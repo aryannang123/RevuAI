@@ -298,20 +298,20 @@ class MultiAccountRedditFetcher:
         if progress_callback:
             progress_callback(0, 100, 'Fetching posts')
         
-        # 12 strategies for 4 accounts (3 per account)
+        # 12 strategies prioritizing relevance for better quality results
         strategies = [
-            {'sort': 'top', 't': 'month'},
-            {'sort': 'top', 't': 'year'},
-            {'sort': 'relevance', 't': 'all'},
-            {'sort': 'comments', 't': 'month'},
-            {'sort': 'top', 't': 'week'},
-            {'sort': 'hot', 't': 'month'},
-            {'sort': 'top', 't': 'all'},
-            {'sort': 'hot', 't': 'week'},
-            {'sort': 'relevance', 't': 'month'},
-            {'sort': 'top', 't': 'day'},
-            {'sort': 'hot', 't': 'day'},
-            {'sort': 'comments', 't': 'week'}
+            {'sort': 'relevance', 't': 'all'},      # Highest priority - most relevant
+            {'sort': 'relevance', 't': 'year'},     # Recent relevant content
+            {'sort': 'relevance', 't': 'month'},    # Very recent relevant content
+            {'sort': 'top', 't': 'month'},          # High quality recent posts
+            {'sort': 'top', 't': 'year'},           # High quality posts
+            {'sort': 'comments', 't': 'month'},     # Posts with lots of discussion
+            {'sort': 'top', 't': 'week'},           # Recent high quality
+            {'sort': 'hot', 't': 'month'},          # Trending content
+            {'sort': 'top', 't': 'all'},            # All-time best
+            {'sort': 'comments', 't': 'week'},      # Recent discussions
+            {'sort': 'hot', 't': 'week'},           # Recent trending
+            {'sort': 'top', 't': 'day'}             # Today's best
         ]
         
         all_posts = []
