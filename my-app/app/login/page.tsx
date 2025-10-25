@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithGoogle, testConnection } from "@/lib/auth";
-import { Brain, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
 import Iridescence from "@/components/Iridescence"; // ✅ your installed shader component
 
 export default function LoginPage() {
@@ -54,11 +54,6 @@ export default function LoginPage() {
       {/* 💎 Glassmorphic Login Card */}
       <div className="relative z-10 flex items-center justify-center min-h-screen px-6">
         <div className="relative bg-white/10 backdrop-blur-3xl border border-cyan-400/30 rounded-3xl shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)] p-10 w-full max-w-md text-center animate-fade-in before:absolute before:inset-0 before:rounded-3xl before:p-[1px] before:bg-gradient-to-r before:from-cyan-400/50 before:to-purple-500/50 before:-z-10 before:blur-[1px]">
-          <div className="flex items-center justify-center mb-6">
-            <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-2xl flex items-center justify-center animate-pulse shadow-lg shadow-cyan-500/50">
-              <Brain className="w-9 h-9 text-white" />
-            </div>
-          </div>
 
           <h1 className="text-5xl font-bold bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient mb-4">
             Rev AI
