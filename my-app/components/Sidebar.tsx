@@ -169,7 +169,7 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
                         onClick={() => {
                           try {
                             if (search.analysis_data) {
-                              // ✅ Load analysis data directly
+                              // ✅ Load analysis data directly (when implemented)
                               sessionStorage.setItem(
                                 "reddit_data",
                                 JSON.stringify(search.analysis_data)
@@ -180,11 +180,14 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
                               );
                               router.push("/analysis");
                             } else {
-                              // 🧩 Fallback: re-run analysis if empty
+                              // 🔄 Re-run analysis (current behavior)
+                              console.log(`🔄 Re-running analysis for: ${search.search_query}`);
                               onSearchSelect(search.search_query);
                             }
                           } catch (err) {
-                            console.error("Error loading saved analysis:", err);
+                            console.error("Error loading search:", err);
+                            // Fallback to re-running the search
+                            onSearchSelect(search.search_query);
                           } finally {
                             onClose();
                           }
@@ -210,6 +213,11 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
                               >
                                 {search.status}
                               </span>
+                              {!search.analysis_data && (
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
+                                  will re-run
+                                </span>
+                              )}
                             </div>
                           </div>
                           <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-white/60 transition-colors" />
