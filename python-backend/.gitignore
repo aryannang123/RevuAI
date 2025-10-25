@@ -21,3 +21,4 @@ instance/
 
 #pre-process data
 /pre-process/*.json
+/pre-process_sentiments/*.json
