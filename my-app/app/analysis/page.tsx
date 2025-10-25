@@ -176,19 +176,10 @@ export default function AnalysisPage() {
             </p>
           </div>
 
-          {/* Sentiment Breakdown - Moved Up */}
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
-            {/* Overall Sentiment */}
-            <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
-              <h3 className="text-xl font-bold text-white mb-4">Overall Sentiment</h3>
-              <div className="text-3xl font-bold text-white mb-2">
-                {sentimentData?.overall_sentiment?.toUpperCase().replace('_', ' ')}
-              </div>
-              <div className="text-white/70">
-                {sentimentData?.total_analyzed} comments analyzed
-              </div>
-            </div>
 
+
+          {/* Charts Section */}
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
             {/* Sentiment Distribution - Pie Chart */}
             {sentimentData?.summary && (
               <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
@@ -203,28 +194,31 @@ export default function AnalysisPage() {
                       ),
                       datasets: [{
                         data: Object.values(sentimentData.summary || {}),
-                        backgroundColor: [
-                          '#10B981', // Green for very positive
-                          '#34D399', // Light green for positive  
-                          '#6B7280', // Gray for neutral
-                          '#F87171', // Light red for negative
-                          '#EF4444', // Red for very negative
-                        ],
-                        borderColor: [
-                          '#059669',
-                          '#10B981',
-                          '#4B5563',
-                          '#DC2626',
-                          '#B91C1C',
-                        ],
+                        backgroundColor: Object.keys(sentimentData.summary || {}).map(sentiment => {
+                          if (sentiment === 'very_positive') return '#065F46'; // Dark green
+                          if (sentiment === 'positive') return '#10B981'; // Green
+                          if (sentiment === 'neutral') return '#F97316'; // Orange
+                          if (sentiment === 'negative') return '#EF4444'; // Red
+                          if (sentiment === 'very_negative') return '#7F1D1D'; // Dark red
+                          return '#9CA3AF'; // Fallback gray
+                        }),
+                        borderColor: Object.keys(sentimentData.summary || {}).map(sentiment => {
+                          if (sentiment === 'very_positive') return '#064E3B';
+                          if (sentiment === 'positive') return '#059669';
+                          if (sentiment === 'neutral') return '#EA580C';
+                          if (sentiment === 'negative') return '#DC2626';
+                          if (sentiment === 'very_negative') return '#450A0A';
+                          return '#6B7280';
+                        }),
                         borderWidth: 2,
-                        hoverBackgroundColor: [
-                          '#059669',
-                          '#10B981',
-                          '#4B5563',
-                          '#DC2626',
-                          '#B91C1C',
-                        ],
+                        hoverBackgroundColor: Object.keys(sentimentData.summary || {}).map(sentiment => {
+                          if (sentiment === 'very_positive') return '#064E3B';
+                          if (sentiment === 'positive') return '#059669';
+                          if (sentiment === 'neutral') return '#EA580C';
+                          if (sentiment === 'negative') return '#DC2626';
+                          if (sentiment === 'very_negative') return '#450A0A';
+                          return '#6B7280';
+                        }),
                       }]
                     }}
                     options={{
@@ -266,11 +260,11 @@ export default function AnalysisPage() {
             {sentimentData?.dominant_emotion && (
               <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
                 <h3 className="text-xl font-bold text-white mb-4">Emotion Breakdown</h3>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {Object.entries(sentimentData.dominant_emotion || {}).map(([emotion, percentage]) => (
-                    <div key={emotion} className="flex justify-between text-white/90">
-                      <span className="capitalize flex items-center gap-2">
-                        <span className="text-lg">
+                    <div key={emotion} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">
                           {emotion === 'joy' ? '😊' :
                             emotion === 'anger' ? '😠' :
                               emotion === 'sadness' ? '😢' :
@@ -279,9 +273,19 @@ export default function AnalysisPage() {
                                     emotion === 'disgust' ? '🤢' :
                                       '😐'}
                         </span>
-                        {emotion}
-                      </span>
-                      <span>{typeof percentage === 'number' ? `${percentage.toFixed(1)}%` : String(percentage)}</span>
+                        <span className="capitalize text-white/90 font-medium">{emotion}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-24 h-2 bg-white/20 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-blue-400 to-purple-500 rounded-full transition-all duration-500"
+                            style={{ width: `${typeof percentage === 'number' ? percentage : 0}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-white/90 font-semibold min-w-[3rem] text-right">
+                          {typeof percentage === 'number' ? `${percentage.toFixed(1)}%` : String(percentage)}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
