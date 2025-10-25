@@ -51,19 +51,6 @@ export default function LoginPage() {
         style={{ animationDelay: "1s" }}
       />
 
-      {/* Navbar */}
-      <nav className="absolute top-6 left-1/2 -translate-x-1/2 z-40 flex space-x-8 bg-gray-900/30 backdrop-blur-xl border border-cyan-400/30 rounded-2xl px-8 py-3 shadow-lg shadow-cyan-500/20">
-        <a href="/" className="text-cyan-300 hover:text-white font-medium transition-colors duration-300">
-          Home
-        </a>
-        <a href="#about" className="text-cyan-300 hover:text-white font-medium transition-colors duration-300">
-          About
-        </a>
-        <a href="#contact" className="text-cyan-300 hover:text-white font-medium transition-colors duration-300">
-          Contact
-        </a>
-      </nav>
-
       {/* 💎 Glassmorphic Login Card */}
       <div className="relative z-10 flex items-center justify-center min-h-screen px-6">
         <div className="relative bg-white/10 backdrop-blur-3xl border border-cyan-400/30 rounded-3xl shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)] p-10 w-full max-w-md text-center animate-fade-in before:absolute before:inset-0 before:rounded-3xl before:p-[1px] before:bg-gradient-to-r before:from-cyan-400/50 before:to-purple-500/50 before:-z-10 before:blur-[1px]">
