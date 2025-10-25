@@ -132,9 +132,6 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
                         {user.user_metadata?.full_name || user.email}
                       </p>
                       <p className="text-white/60 text-sm">{user.email}</p>
-                      <p className="text-white/60 text-xs">
-                        Joined {new Date(user.created_at).toLocaleDateString()}
-                      </p>
                     </div>
                   </div>
                   <button
