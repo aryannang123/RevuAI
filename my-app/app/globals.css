@@ -235,12 +235,70 @@ html {
   background-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Profile card hover effects */
-.profile-glow {
-  transition: all 0.3s ease-in-out;
+.liquid-container {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  border: 2px solid rgba(0, 255, 255, 0.3);
+  box-shadow: inset 0 0 15px rgba(0, 255, 255, 0.25),
+              0 0 25px rgba(0, 255, 255, 0.25);
 }
-.profile-glow:hover {
-  box-shadow: 0 0 25px rgba(0, 255, 255, 0.4),
-              0 0 45px rgba(255, 100, 200, 0.3);
-  transform: scale(1.05);
+
+.liquid {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 200%;
+  overflow: hidden;
+  transition: transform 0.8s ease-out;
+}
+
+.wave,
+.wave2 {
+  position: absolute;
+  left: -50%;
+  width: 200%;
+  height: 100%;
+  border-radius: 40%;
+  background: linear-gradient(180deg, rgba(0, 255, 255, 0.6), rgba(0, 200, 255, 0.4));
+  opacity: 0.9;
+  animation: waveMove 4s linear infinite;
+  filter: drop-shadow(0 0 15px rgba(0, 255, 255, 0.5));
+}
+
+.wave2 {
+  opacity: 0.6;
+  animation: waveMoveReverse 6s linear infinite;
+}
+
+.liquid-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 20px rgba(0, 255, 255, 0.6),
+              inset 0 0 40px rgba(0, 255, 255, 0.4);
+  pointer-events: none;
+}
+
+/* Wave Animations */
+@keyframes waveMove {
+  from {
+    transform: translateX(0) rotate(0deg);
+  }
+  to {
+    transform: translateX(-25%) rotate(360deg);
+  }
+}
+
+@keyframes waveMoveReverse {
+  from {
+    transform: translateX(0) rotate(360deg);
+  }
+  to {
+    transform: translateX(-25%) rotate(0deg);
+  }
 }
