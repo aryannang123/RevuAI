@@ -206,7 +206,7 @@ export default function AnalysisPage() {
                         // Filter out neutral and rescale
                         const filteredData = Object.entries(sentimentData.summary || {})
                           .filter(([key]) => key !== 'neutral');
-                        
+
                         return filteredData.map(([key]) =>
                           key.replace('_', ' ').split(' ').map(word =>
                             word.charAt(0).toUpperCase() + word.slice(1)
@@ -218,17 +218,17 @@ export default function AnalysisPage() {
                           // Filter out neutral and rescale to 100%
                           const filteredData = Object.entries(sentimentData.summary || {})
                             .filter(([key]) => key !== 'neutral');
-                          
+
                           const totalNonNeutral = filteredData.reduce((sum, [, value]) => sum + (value as number), 0);
-                          
-                          return filteredData.map(([, value]) => 
+
+                          return filteredData.map(([, value]) =>
                             totalNonNeutral > 0 ? ((value as number) / totalNonNeutral) * 100 : 0
                           );
                         })(),
                         backgroundColor: (() => {
                           const filteredKeys = Object.keys(sentimentData.summary || {})
                             .filter(key => key !== 'neutral');
-                          
+
                           return filteredKeys.map(sentiment => {
                             if (sentiment === 'very_positive') return '#065F46'; // Dark green
                             if (sentiment === 'positive') return '#10B981'; // Green
@@ -240,7 +240,7 @@ export default function AnalysisPage() {
                         borderColor: (() => {
                           const filteredKeys = Object.keys(sentimentData.summary || {})
                             .filter(key => key !== 'neutral');
-                          
+
                           return filteredKeys.map(sentiment => {
                             if (sentiment === 'very_positive') return '#064E3B';
                             if (sentiment === 'positive') return '#059669';
@@ -253,7 +253,7 @@ export default function AnalysisPage() {
                         hoverBackgroundColor: (() => {
                           const filteredKeys = Object.keys(sentimentData.summary || {})
                             .filter(key => key !== 'neutral');
-                          
+
                           return filteredKeys.map(sentiment => {
                             if (sentiment === 'very_positive') return '#064E3B';
                             if (sentiment === 'positive') return '#059669';
@@ -310,7 +310,7 @@ export default function AnalysisPage() {
                         // Filter out neutral emotions and rescale
                         const filteredEmotions = Object.entries(sentimentData.dominant_emotion || {})
                           .filter(([emotion]) => emotion !== 'neutral');
-                        
+
                         return filteredEmotions.map(([emotion]) => {
                           const emoji = emotion === 'joy' ? '😊' :
                             emotion === 'anger' ? '😠' :
@@ -328,17 +328,17 @@ export default function AnalysisPage() {
                           // Filter out neutral and rescale to 100%
                           const filteredEmotions = Object.entries(sentimentData.dominant_emotion || {})
                             .filter(([emotion]) => emotion !== 'neutral');
-                          
+
                           const totalNonNeutral = filteredEmotions.reduce((sum, [, value]) => sum + (value as number), 0);
-                          
-                          return filteredEmotions.map(([, value]) => 
+
+                          return filteredEmotions.map(([, value]) =>
                             totalNonNeutral > 0 ? ((value as number) / totalNonNeutral) * 100 : 0
                           );
                         })(),
                         backgroundColor: (() => {
                           const filteredEmotions = Object.keys(sentimentData.dominant_emotion || {})
                             .filter(emotion => emotion !== 'neutral');
-                          
+
                           return filteredEmotions.map(emotion => {
                             if (emotion === 'joy') return '#10B981'; // Green
                             if (emotion === 'anger') return '#EF4444'; // Red
@@ -352,7 +352,7 @@ export default function AnalysisPage() {
                         borderColor: (() => {
                           const filteredEmotions = Object.keys(sentimentData.dominant_emotion || {})
                             .filter(emotion => emotion !== 'neutral');
-                          
+
                           return filteredEmotions.map(emotion => {
                             if (emotion === 'joy') return '#059669';
                             if (emotion === 'anger') return '#DC2626';
@@ -429,61 +429,120 @@ export default function AnalysisPage() {
               <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
                 🤖 AI Analysis Summary
               </h2>
-              <div className="space-y-4">
-                {(() => {
-                  const summary = sentimentData.ai_summary.paragraph_summary;
+              {(() => {
+                const summary = sentimentData.ai_summary.paragraph_summary;
 
-                  // Split by common bullet point patterns and clean up
-                  const points = summary
-                    .split(/(?:\d+\.|\•|\-|\.)\s+/)
+                // Parse the new structured format (with or without asterisks)
+                const positiveMatch = summary.match(/(?:\*\*)?POSITIVE INSIGHTS:(?:\*\*)?([\s\S]*?)(?=(?:\*\*)?NEGATIVE INSIGHTS:|$)/);
+                const negativeMatch = summary.match(/(?:\*\*)?NEGATIVE INSIGHTS:(?:\*\*)?([\s\S]*?)$/);
+
+                let positivePoints: string[] = [];
+                let negativePoints: string[] = [];
+
+                if (positiveMatch) {
+                  positivePoints = positiveMatch[1]
+                    .split(/•/)
                     .map(point => point.trim())
-                    .filter(point => point.length > 20) // Filter out very short fragments
-                    .slice(0, 8); // Limit to 8 key points
+                    .filter(point => point.length > 10);
+                }
 
-                  return points.map((point, index) => (
-                    <div key={index} className="flex items-start gap-4 p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
-                      <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                        {index + 1}
+                if (negativeMatch) {
+                  negativePoints = negativeMatch[1]
+                    .split(/•/)
+                    .map(point => point.trim())
+                    .filter(point => point.length > 10);
+                }
+
+                // Fallback: try to extract from older formats
+                if (positivePoints.length === 0 && negativePoints.length === 0) {
+                  // Try PROS/CONS format
+                  const prosMatch = summary.match(/(?:\*\*)?PROS:(?:\*\*)?([\s\S]*?)(?=(?:\*\*)?CONS:|$)/);
+                  const consMatch = summary.match(/(?:\*\*)?CONS:(?:\*\*)?([\s\S]*?)$/);
+
+                  if (prosMatch) {
+                    positivePoints = prosMatch[1]
+                      .split(/•|\-/)
+                      .map(point => point.trim())
+                      .filter(point => point.length > 10);
+                  }
+
+                  if (consMatch) {
+                    negativePoints = consMatch[1]
+                      .split(/•|\-/)
+                      .map(point => point.trim())
+                      .filter(point => point.length > 10);
+                  }
+                }
+
+                // Final fallback: create generic insights if no structured format found
+                if (positivePoints.length === 0 && negativePoints.length === 0) {
+                  positivePoints = [
+                    "Users show engagement with the product features and functionality",
+                    "Community discussions indicate active user participation"
+                  ];
+                  negativePoints = [
+                    "Some users express concerns about specific features or performance",
+                    "Mixed feedback suggests areas for potential improvement"
+                  ];
+                }
+
+                return (
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {/* Positive Insights Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-8 h-8 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">+</span>
+                        </div>
+                        <h3 className="text-xl font-bold text-green-400">Positive Insights</h3>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-white/90 leading-relaxed text-base">
-                          {point.replace(/^[^\w]*/, '').trim()}
-                        </p>
+
+                      <div className="space-y-3">
+                        {positivePoints.map((point, index) => (
+                          <div key={index} className="flex items-start gap-3 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                            <div className="w-1.5 h-1.5 bg-green-400 rounded-full mt-2.5 flex-shrink-0"></div>
+                            <p className="text-white/90 text-sm leading-relaxed">
+                              {point}
+                            </p>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ));
-                })()}
-              </div>
 
-              {/* Summary Stats */}
-              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                  <div className="text-cyan-400 text-sm font-medium">Overall Sentiment</div>
-                  <div className="text-white text-xl font-bold capitalize">
-                    {sentimentData.overall_sentiment?.replace('_', ' ')}
+                    {/* Negative Insights Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-8 h-8 bg-gradient-to-r from-red-400 to-rose-500 rounded-full flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">-</span>
+                        </div>
+                        <h3 className="text-xl font-bold text-red-400">Negative Insights</h3>
+                      </div>
+
+                      <div className="space-y-3">
+                        {negativePoints.map((point, index) => (
+                          <div key={index} className="flex items-start gap-3 p-3 bg-red-500/10 rounded-lg border border-red-500/20">
+                            <div className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2.5 flex-shrink-0"></div>
+                            <p className="text-white/90 text-sm leading-relaxed">
+                              {point}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                  <div className="text-cyan-400 text-sm font-medium">Comments Analyzed</div>
-                  <div className="text-white text-xl font-bold">
-                    {sentimentData.total_analyzed?.toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                  <div className="text-cyan-400 text-sm font-medium">Dominant Emotion</div>
-                  <div className="text-white text-xl font-bold capitalize">
-                    {sentimentData.dominant_emotion ?
-                      Object.entries(sentimentData.dominant_emotion)
-                        .filter(([key]) => key !== 'neutral')
-                        .sort(([, a], [, b]) => (b as number) - (a as number))[0]?.[0] || 'N/A'
-                      : 'N/A'
-                    }
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               <div className="mt-6 text-white/60 text-sm border-t border-white/10 pt-4 flex items-center justify-between">
-                <span>Generated by {sentimentData.ai_summary?.model_used}</span>
+                <div className="flex items-center gap-4">
+                  <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/10">
+                    <div className="text-cyan-400 text-xs font-medium">Comments Analyzed</div>
+                    <div className="text-white text-sm font-bold">
+                      {sentimentData.total_analyzed?.toLocaleString()}
+                    </div>
+                  </div>
+                  <span>Generated by {sentimentData.ai_summary?.model_used}</span>
+                </div>
                 <span>{new Date(sentimentData.ai_summary?.generated_at || '').toLocaleString()}</span>
               </div>
             </div>

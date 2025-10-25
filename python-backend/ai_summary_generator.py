@@ -245,44 +245,38 @@ class AISummaryGenerator:
         neu_pct = sentiment_breakdown.get('neutral', 0)
 
         prompt = f"""
-You are a professional market research analyst. Your job is to convert raw, categorized sentiment data into a clear, concise executive summary for a non-technical stakeholder (like a Product Manager or marketing lead).
-
-The stakeholder will also be viewing pie charts and bar graphs that show the *percentage* of each sentiment (Positive, Negative, etc.).
-
-**Your task is to write a summary that explains the "WHY" behind those percentages.** Do NOT simply state the counts or percentages (e.g., "There are 50 positive comments"). Instead, synthesize the *key themes* from the comments in each category.
-
----
-
-**Product/Topic:**
-{query}
+You are a professional market research analyst analyzing user sentiment for {query}.
 
 **Data Overview:**
-- Total Comments Analyzed: {total_comments}
-- Sentiment Distribution: {pos_pct:.1f}% Positive, {neg_pct:.1f}% Negative, {neu_pct:.1f}% Neutral
-- Overall Sentiment: {overall_sentiment.title()}
+- Total Comments: {total_comments}
+- Sentiment: {pos_pct:.1f}% Positive, {neg_pct:.1f}% Negative, {neu_pct:.1f}% Neutral
+- Overall: {overall_sentiment.title()}
 
-**Key Insights:**
-- Positive Themes: {', '.join(insights['positive_themes']) if insights['positive_themes'] else 'None identified'}
-- User Concerns: {', '.join(insights['user_concerns']) if insights['user_concerns'] else 'None identified'}
+**Sample Positive Comments:**
+{chr(10).join(f"- {c.get('text', '')[:100]}..." for c in positive_comments[:3] if c.get('text'))}
 
-**Sample Comments:**
-Positive:
-{chr(10).join(f"- {c.get('text', '')}" for c in positive_comments[:3])}
+**Sample Negative Comments:**
+{chr(10).join(f"- {c.get('text', '')[:100]}..." for c in negative_comments[:3] if c.get('text'))}
 
-Negative:
-{chr(10).join(f"- {c.get('text', '')}" for c in negative_comments[:3])}
+**CRITICAL: You MUST format your response EXACTLY like this:**
 
----
+**POSITIVE INSIGHTS:**
+• Users praise the performance and speed improvements compared to previous models
+• Many appreciate the enhanced camera quality and photo processing capabilities  
+• The build quality and premium design receive consistent positive feedback
 
-**Instructions for the Summary:**
+**NEGATIVE INSIGHTS:**
+• Battery life concerns are frequently mentioned by users in daily usage scenarios
+• Price point is considered too high by many potential buyers and existing users
+• Some users report heating issues during intensive tasks and gaming sessions
 
-1.  **Start with an "Overall Sentiment"**: Give a 1-2 sentence high-level overview.
-2.  **Positive Highlights**: In a bulleted list, summarize the 2-3 main themes people *love*.
-3.  **Negative Pain Points**: In a bulleted list, summarize the 2-3 most common complaints.
-4.  **Mixed & Neutral Observations**: Briefly mention any common neutral themes.
-
-Keep the language clear, professional, and actionable. Limit to 150-200 words.
-"""
+**INSTRUCTIONS:**
+- Use EXACTLY the format above with "**POSITIVE INSIGHTS:**" and "**NEGATIVE INSIGHTS:**"
+- Each section must have exactly 3 bullet points using "•" 
+- Base insights on the actual comments provided
+- Keep each point to 1-2 sentences maximum
+- Be specific and actionable, avoid generic statements
+- Focus on what users actually said, not percentages"""
         return prompt
 
     # ================================================================
