@@ -2,6 +2,7 @@
 """
 Enhanced Reddit Comment Sentiment Analysis with j-hartmann Emotion Model
 Provides detailed sentiment classification: very negative, negative, neutral, positive, very positive
+Uses emotion detection to determine sentiment with high accuracy
 """
 
 import json
@@ -31,12 +32,12 @@ TRUNCATE_LENGTH = 512
 
 class EnhancedSentimentAnalyzer:
     def __init__(self):
-        """Initialize with j-hartmann emotion model as primary analyzer"""
-        print("🤖 Loading Enhanced Sentiment Analysis Models...")
+        """Initialize with j-hartmann emotion model for sentiment analysis"""
+        print("🤖 Loading Enhanced Sentiment Analysis Model...")
         print(f"🔧 Device: {DEVICE_NAME}")
         print(f"📦 Batch size: {MAX_BATCH_SIZE}")
         
-        # Primary: j-hartmann emotion model
+        # j-hartmann emotion model for sentiment analysis
         self.emotion_analyzer = pipeline(
             "text-classification",
             model="j-hartmann/emotion-english-distilroberta-base",
@@ -44,15 +45,7 @@ class EnhancedSentimentAnalyzer:
             batch_size=MAX_BATCH_SIZE
         )
         
-        # Secondary: Cardiff sentiment for validation
-        self.sentiment_analyzer = pipeline(
-            "sentiment-analysis",
-            model="cardiffnlp/twitter-roberta-base-sentiment-latest",
-            device=DEVICE,
-            batch_size=MAX_BATCH_SIZE
-        )
-        
-        print("✅ Models loaded successfully!")
+        print("✅ Model loaded successfully!")
 
     def _emotion_to_sentiment(self, emotion, confidence):
         """
@@ -80,18 +73,7 @@ class EnhancedSentimentAnalyzer:
         else:
             return 'neutral', 0.0
 
-    def _cardiff_to_sentiment(self, label, confidence):
-        """Map Cardiff NLP labels with confidence thresholds"""
-        if label == 'LABEL_2' and confidence >= 0.8:  # Very confident positive
-            return 'very_positive', confidence
-        elif label == 'LABEL_2' and confidence >= 0.6:  # Confident positive
-            return 'positive', confidence
-        elif label == 'LABEL_0' and confidence >= 0.8:  # Very confident negative
-            return 'very_negative', -confidence
-        elif label == 'LABEL_0' and confidence >= 0.6:  # Confident negative
-            return 'negative', -confidence
-        else:
-            return 'neutral', 0.0
+
 
     def analyze_comments_batch(self, comments_data):
         """Analyze comments with detailed sentiment classification"""
@@ -121,34 +103,20 @@ class EnhancedSentimentAnalyzer:
         analyzed_comments = []
         
         try:
-            # Run both emotion and sentiment analysis
+            # Run emotion analysis with j-hartmann model
             print("😊 Running emotion analysis (j-hartmann)...")
             emotion_results = self.emotion_analyzer(texts)
             
-            print("🎭 Running sentiment validation (Cardiff)...")
-            sentiment_results = self.sentiment_analyzer(texts)
-            
-            for i, (emotion_result, sentiment_result, meta) in enumerate(zip(emotion_results, sentiment_results, metadata)):
-                # Primary classification from emotion model
+            for i, (emotion_result, meta) in enumerate(zip(emotion_results, metadata)):
+                # Classification from emotion model
                 emotion_sentiment, emotion_confidence = self._emotion_to_sentiment(
                     emotion_result['label'], 
                     emotion_result['score']
                 )
                 
-                # Secondary validation from Cardiff model
-                cardiff_sentiment, cardiff_confidence = self._cardiff_to_sentiment(
-                    sentiment_result['label'],
-                    sentiment_result['score']
-                )
-                
-                # Use emotion model as primary, Cardiff as validation
+                # Use emotion model result directly
                 final_sentiment = emotion_sentiment
                 final_confidence = abs(emotion_confidence)
-                
-                # If emotion model is neutral but Cardiff is confident, use Cardiff
-                if emotion_sentiment == 'neutral' and cardiff_sentiment != 'neutral':
-                    final_sentiment = cardiff_sentiment
-                    final_confidence = abs(cardiff_confidence)
                 
                 result = {
                     'id': meta['id'],
@@ -160,12 +128,6 @@ class EnhancedSentimentAnalyzer:
                     'emotion': {
                         'primary': emotion_result['label'],
                         'confidence': round(emotion_result['score'], 4)
-                    },
-                    'sentiment_details': {
-                        'emotion_based': emotion_sentiment,
-                        'cardiff_based': cardiff_sentiment,
-                        'emotion_confidence': round(emotion_result['score'], 4),
-                        'cardiff_confidence': round(sentiment_result['score'], 4)
                     }
                 }
                 
@@ -222,6 +184,22 @@ class EnhancedSentimentAnalyzer:
             
             emotion_percentages = {k: (v/total_analyzed)*100 for k, v in emotion_counts.items()}
             
+            # Confidence breakdown (10 bins from 0.0-1.0) - Using Emotion Confidence
+            confidence_bins = {
+                '0.0-0.1': 0, '0.1-0.2': 0, '0.2-0.3': 0, '0.3-0.4': 0, '0.4-0.5': 0,
+                '0.5-0.6': 0, '0.6-0.7': 0, '0.7-0.8': 0, '0.8-0.9': 0, '0.9-1.0': 0
+            }
+            
+            for comment in analyzed_comments:
+                # Use emotion confidence for the confidence breakdown
+                emotion_confidence = comment['emotion']['confidence']
+                bin_index = min(int(emotion_confidence * 10), 9)  # Ensure max index is 9
+                bin_keys = list(confidence_bins.keys())
+                confidence_bins[bin_keys[bin_index]] += 1
+            
+            # Convert confidence counts to percentages
+            confidence_percentages = {k: (v/total_analyzed)*100 for k, v in confidence_bins.items()}
+            
             # Get top comments by category
             top_very_positive = sorted(
                 [c for c in analyzed_comments if c['sentiment'] == 'very_positive'], 
@@ -244,9 +222,11 @@ class EnhancedSentimentAnalyzer:
                 'model_used': 'j-hartmann/emotion-english-distilroberta-base',
                 'sentiment_breakdown_5class': sentiment_percentages,
                 'emotion_breakdown': emotion_percentages,
+                'confidence_breakdown': confidence_percentages,
                 'raw_counts': {
                     'sentiment': dict(sentiment_counts),
-                    'emotion': dict(emotion_counts)
+                    'emotion': dict(emotion_counts),
+                    'confidence': dict(confidence_bins)
                 },
                 'overall_sentiment': dominant_sentiment,
                 'confidence': round(sentiment_percentages[dominant_sentiment], 2),
@@ -311,6 +291,16 @@ class EnhancedSentimentAnalyzer:
             
             dominant_emotion = max(emotion_percentages, key=emotion_percentages.get)
             print(f"\n😊 Dominant emotion: {dominant_emotion} ({emotion_percentages[dominant_emotion]:.1f}%)")
+            
+            # Show emotion confidence distribution summary
+            high_confidence = confidence_percentages.get('0.8-0.9', 0) + confidence_percentages.get('0.9-1.0', 0)
+            medium_confidence = confidence_percentages.get('0.6-0.7', 0) + confidence_percentages.get('0.7-0.8', 0)
+            low_confidence = sum(confidence_percentages.get(k, 0) for k in ['0.0-0.1', '0.1-0.2', '0.2-0.3', '0.3-0.4', '0.4-0.5', '0.5-0.6'])
+            
+            print(f"\n📊 Emotion Confidence Distribution:")
+            print(f"   High (0.8-1.0):   {high_confidence:.1f}%")
+            print(f"   Medium (0.6-0.8): {medium_confidence:.1f}%") 
+            print(f"   Low (0.0-0.6):    {low_confidence:.1f}%")
             print(f"{'='*60}\n")
             
             return analysis_result
@@ -367,7 +357,7 @@ class EnhancedSentimentAnalyzer:
 def main():
     """Main function to run enhanced sentiment analysis"""
     print("\n" + "="*60)
-    print("🚀 Enhanced Reddit Sentiment Analysis with j-hartmann Model")
+    print("🚀 Enhanced Reddit Sentiment Analysis - Emotion-Based Classification")
     print("="*60 + "\n")
     
     analyzer = EnhancedSentimentAnalyzer()
