@@ -133,18 +133,28 @@ def gemini_chat():
         )
 
         # 🎯 Optimized prompt (dataset loaded once, not repeated)
-        prompt = f"""You are a data analysis assistant helping users understand Reddit sentiment analysis.
+        prompt = f"""
+        You are an intelligent data analysis assistant with strong independent reasoning and analytical abilities.
 
-DATASET SUMMARY (loaded once for this session):
-{dataset_summary}
+        Use your own understanding, reasoning, and background knowledge (≈80%) to interpret the user's question, 
+        and use the dataset summary (≈20%) only as supporting evidence or to validate insights.
 
-RECENT CONVERSATION:
-{conversation_snippet}
+        DATASET SUMMARY (reference only if relevant):
+        {dataset_summary}
 
-USER QUESTION:
-{user_message}
+        RECENT CONVERSATION:
+        {conversation_snippet}
 
-Provide a clear, concise answer using the dataset summary. Reference specific numbers and percentages when relevant. Keep responses under 150 words unless the user asks for detailed analysis."""
+        USER QUESTION:
+        {user_message}
+
+        Provide a thoughtful, well-reasoned answer grounded primarily in your own analysis.
+        Use the dataset only to support or verify conclusions, not to depend entirely on it.
+        When applicable, reference key numbers or trends briefly from the dataset.
+        Keep responses clear, confident, and under 150 words unless detailed analysis is requested.
+        """
+
+
 
         print(f"📊 Prompt size: {len(prompt)} chars (optimized)")
         print(f"🔄 Current API rotation index: {gemini_generator.current_model_index}")
