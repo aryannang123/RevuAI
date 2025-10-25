@@ -139,16 +139,9 @@ def fetch_mass_comments():
         print(f"   Posts: {result['metadata']['totalPosts']:,}")
         print(f"   File size: {os.path.getsize(reddit_file) / 1024:.1f} KB\n")
         
-        # Try to create sentiment analysis
-        sentiment_result = create_sentiment_analysis_from_file(reddit_file, query)
-        
-        if sentiment_result:
-            print("✅ Sentiment analysis completed\n")
-            return jsonify(sentiment_result)
-        else:
-            # Return Reddit data even if sentiment analysis fails
-            print("⚠️  Returning raw data (sentiment analysis unavailable)\n")
-            return jsonify(result)
+        # Return the result with enhanced sentiment analysis included
+        print("✅ Enhanced sentiment analysis completed\n")
+        return jsonify(result)
         
     except Exception as e:
         print(f"\n❌ Error in /api/reddit/fetch-mass-comments:")
