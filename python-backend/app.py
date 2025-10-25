@@ -96,12 +96,21 @@ def fetch_mass_comments():
             sentiment_result = analyzer.analyze_json_file(temp_reddit_file)
             
             if sentiment_result:
-                # Save enhanced sentiment analysis
-                sentiment_file = f"pre-process/enhanced_sentiment_{query.replace(' ', '_')}_{timestamp}.json"
+    # 🆕 Ensure separate directory for sentiment outputs
+                sentiment_dir = "pre-process_sentiments"
+                os.makedirs(sentiment_dir, exist_ok=True)
+
+    # Save enhanced sentiment analysis in new folder
+                sentiment_file = os.path.join(
+                    sentiment_dir, 
+                    f"enhanced_sentiment_{query.replace(' ', '_')}_{timestamp}.json"
+                )
+
                 with open(sentiment_file, 'w', encoding='utf-8') as f:
                     json.dump(sentiment_result, f, indent=2, ensure_ascii=False)
-                
+
                 print(f"✅ Enhanced sentiment analysis saved to: {sentiment_file}")
+
                 
                 # Add sentiment summary to the result
                 result['sentiment_analysis'] = {
