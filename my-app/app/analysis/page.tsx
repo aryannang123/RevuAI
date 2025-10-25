@@ -4,13 +4,16 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Iridescence from "@/components/Iridescence";
 import GooeyNav from "@/components/GooeyNav";
-import { Pie } from 'react-chartjs-2';
+import { Pie, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   ArcElement,
   Tooltip,
   Legend,
-  ChartOptions
+  ChartOptions,
+  CategoryScale,
+  LinearScale,
+  BarElement
 } from 'chart.js';
 
 interface SentimentData {
@@ -23,6 +26,11 @@ interface SentimentData {
   overall_sentiment?: string;
   total_analyzed?: number;
   dominant_emotion?: Record<string, number>;
+  confidence_breakdown?: Record<string, number>;
+  all_comments?: Array<{
+    confidence: number;
+    sentiment: string;
+  }>;
   top_comments?: {
     most_very_positive?: {
       text: string;
@@ -36,7 +44,7 @@ interface SentimentData {
 }
 
 // Register Chart.js components
-ChartJS.register(ArcElement, Tooltip, Legend);
+ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
 
 export default function AnalysisPage() {
   const router = useRouter();
@@ -61,6 +69,8 @@ export default function AnalysisPage() {
 
       // Check if we have sentiment analysis in the data
       if (parsedData.sentiment_analysis) {
+        console.log("Sentiment data from session:", parsedData.sentiment_analysis);
+        console.log("Has confidence_breakdown:", !!parsedData.sentiment_analysis.confidence_breakdown);
         setSentimentData(parsedData.sentiment_analysis);
         setLoading(false);
       } else {
@@ -71,6 +81,8 @@ export default function AnalysisPage() {
         fetch(backendUrl)
           .then(async (res) => {
             const json = await res.json();
+            console.log("Sentiment data from API:", json);
+            console.log("Has confidence_breakdown:", !!json.confidence_breakdown);
             setSentimentData(json);
             setLoading(false);
           })
@@ -178,7 +190,7 @@ export default function AnalysisPage() {
 
 
 
-          {/* Charts Section */}
+          {/* Top Charts Section */}
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             {/* Sentiment Distribution - Pie Chart */}
             {sentimentData?.summary && (
@@ -256,41 +268,194 @@ export default function AnalysisPage() {
               </div>
             )}
 
-            {/* Emotion Breakdown */}
+            {/* Emotion Breakdown - Horizontal Bar Chart */}
             {sentimentData?.dominant_emotion && (
               <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
                 <h3 className="text-xl font-bold text-white mb-4">Emotion Breakdown</h3>
-                <div className="space-y-3">
-                  {Object.entries(sentimentData.dominant_emotion || {}).map(([emotion, percentage]) => (
-                    <div key={emotion} className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">
-                          {emotion === 'joy' ? '😊' :
-                            emotion === 'anger' ? '😠' :
-                              emotion === 'sadness' ? '😢' :
-                                emotion === 'fear' ? '😨' :
-                                  emotion === 'surprise' ? '😲' :
-                                    emotion === 'disgust' ? '🤢' :
-                                      '😐'}
-                        </span>
-                        <span className="capitalize text-white/90 font-medium">{emotion}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-24 h-2 bg-white/20 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-blue-400 to-purple-500 rounded-full transition-all duration-500"
-                            style={{ width: `${typeof percentage === 'number' ? percentage : 0}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-white/90 font-semibold min-w-[3rem] text-right">
-                          {typeof percentage === 'number' ? `${percentage.toFixed(1)}%` : String(percentage)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                <div className="h-64 flex items-center justify-center">
+                  <Bar
+                    data={{
+                      labels: Object.keys(sentimentData.dominant_emotion || {}).map(emotion => {
+                        const emoji = emotion === 'joy' ? '😊' :
+                          emotion === 'anger' ? '😠' :
+                            emotion === 'sadness' ? '😢' :
+                              emotion === 'fear' ? '😨' :
+                                emotion === 'surprise' ? '😲' :
+                                  emotion === 'disgust' ? '🤢' :
+                                    '😐';
+                        return `${emoji} ${emotion.charAt(0).toUpperCase() + emotion.slice(1)}`;
+                      }),
+                      datasets: [{
+                        label: 'Emotion %',
+                        data: Object.values(sentimentData.dominant_emotion || {}),
+                        backgroundColor: Object.keys(sentimentData.dominant_emotion || {}).map(emotion => {
+                          if (emotion === 'joy') return '#10B981'; // Green
+                          if (emotion === 'anger') return '#EF4444'; // Red
+                          if (emotion === 'sadness') return '#3B82F6'; // Blue
+                          if (emotion === 'fear') return '#8B5CF6'; // Purple
+                          if (emotion === 'surprise') return '#F59E0B'; // Yellow
+                          if (emotion === 'disgust') return '#84CC16'; // Lime
+                          if (emotion === 'neutral') return '#6B7280'; // Gray
+                          return '#9CA3AF'; // Fallback
+                        }),
+                        borderColor: Object.keys(sentimentData.dominant_emotion || {}).map(emotion => {
+                          if (emotion === 'joy') return '#059669';
+                          if (emotion === 'anger') return '#DC2626';
+                          if (emotion === 'sadness') return '#2563EB';
+                          if (emotion === 'fear') return '#7C3AED';
+                          if (emotion === 'surprise') return '#D97706';
+                          if (emotion === 'disgust') return '#65A30D';
+                          if (emotion === 'neutral') return '#4B5563';
+                          return '#6B7280';
+                        }),
+                        borderWidth: 1,
+                        borderRadius: 4,
+                      }]
+                    }}
+                    options={{
+                      indexAxis: 'y' as const,
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          display: false
+                        },
+                        tooltip: {
+                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                          titleColor: '#F3F4F6',
+                          bodyColor: '#F3F4F6',
+                          borderColor: 'rgba(255, 255, 255, 0.2)',
+                          borderWidth: 1,
+                          callbacks: {
+                            label: function (context) {
+                              const value = context.parsed?.x;
+                              return `${value?.toFixed(1) || 0}%`;
+                            }
+                          }
+                        }
+                      },
+                      scales: {
+                        x: {
+                          beginAtZero: true,
+                          max: 100,
+                          ticks: {
+                            color: '#F3F4F6',
+                            stepSize: 20,
+                            callback: function(value) {
+                              return value + '%';
+                            }
+                          },
+                          grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                          }
+                        },
+                        y: {
+                          ticks: {
+                            color: '#F3F4F6',
+                            font: {
+                              size: 12
+                            }
+                          },
+                          grid: {
+                            display: false
+                          }
+                        }
+                      }
+                    } as ChartOptions<'bar'>}
+                  />
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Bottom Charts Section */}
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            {/* Confidence Metrics Histogram */}
+            {sentimentData?.confidence_breakdown ? (
+              <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
+                <h3 className="text-xl font-bold text-white mb-4">Confidence Distribution</h3>
+                <div className="h-64 flex items-center justify-center">
+                  <Bar
+                    data={{
+                      labels: Object.keys(sentimentData.confidence_breakdown),
+                      datasets: [{
+                        label: 'Percentage of Comments',
+                        data: Object.values(sentimentData.confidence_breakdown),
+                        backgroundColor: '#3B82F6',
+                        borderColor: '#2563EB',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          display: false
+                        },
+                        tooltip: {
+                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                          titleColor: '#F3F4F6',
+                          bodyColor: '#F3F4F6',
+                          borderColor: 'rgba(255, 255, 255, 0.2)',
+                          borderWidth: 1,
+                          callbacks: {
+                            label: function (context) {
+                              const value = context.parsed.y;
+                              return `${value?.toFixed(1) || 0}% of comments`;
+                            }
+                          }
+                        }
+                      },
+                      scales: {
+                        x: {
+                          ticks: {
+                            color: '#F3F4F6',
+                            font: {
+                              size: 10
+                            }
+                          },
+                          grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                          },
+                          title: {
+                            display: true,
+                            text: 'Confidence Range',
+                            color: '#F3F4F6'
+                          }
+                        },
+                        y: {
+                          beginAtZero: true,
+                          ticks: {
+                            color: '#F3F4F6',
+                            stepSize: 1
+                          },
+                          grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                          },
+                          title: {
+                            display: true,
+                            text: 'Percentage of Comments',
+                            color: '#F3F4F6'
+                          }
+                        }
+                      }
+                    } as ChartOptions<'bar'>}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
+                <h3 className="text-xl font-bold text-white mb-4">Confidence Distribution</h3>
+                <div className="h-64 flex items-center justify-center text-white/70">
+                  <p>Confidence data not available</p>
+                </div>
+              </div>
+            )}
+
+            {/* Empty space to maintain grid balance */}
+            <div></div>
           </div>
 
           {/* AI Summary Section - Moved Below */}
