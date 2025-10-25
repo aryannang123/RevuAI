@@ -46,7 +46,7 @@ void main() {
 }
 `;
 
-export default function Iridescence({ color = [1, 1, 1], speed = 1.0, amplitude = 0.1, mouseReact = true, ...rest }) {
+export default function Iridescence({ color = [0.4, 0.6, 1], speed = 1.0, amplitude = 0.1, mouseReact = true, ...rest }) {
   const ctnDom = useRef(null);
   const mousePos = useRef({ x: 0.5, y: 0.5 });
 
@@ -55,7 +55,7 @@ export default function Iridescence({ color = [1, 1, 1], speed = 1.0, amplitude 
     const ctn = ctnDom.current;
     const renderer = new Renderer();
     const gl = renderer.gl;
-    gl.clearColor(1, 1, 1, 1);
+    gl.clearColor(0, 0, 0, 0);
 
     let program;
 
