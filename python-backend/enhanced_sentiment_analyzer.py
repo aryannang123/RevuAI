@@ -31,6 +31,89 @@ MAX_BATCH_SIZE = 16
 TRUNCATE_LENGTH = 512
 
 class EnhancedSentimentAnalyzer:
+    # Add these extensive keyword lists at the top of EnhancedSentimentAnalyzer class
+
+    POSITIVE_KEYWORDS = [
+        # Quality & Excellence
+        "good", "great", "excellent", "amazing", "awesome", "fantastic", "wonderful", 
+        "brilliant", "outstanding", "superb", "exceptional", "perfect", "flawless",
+        "impressive", "remarkable", "fabulous", "magnificent", "stellar", "phenomenal",
+        
+        # Satisfaction & Approval
+        "love", "like", "enjoy", "pleased", "satisfied", "happy", "glad", "delighted",
+        "thrilled", "excited", "appreciate", "grateful", "thankful", "blessed",
+        
+        # Recommendation & Value
+        "recommend", "worth", "best", "top", "must", "definitely", "absolutely",
+        "highly", "strongly", "favorite", "favourite", "premium", "quality",
+        
+        # Performance & Function
+        "fast", "quick", "smooth", "easy", "simple", "reliable", "stable", "efficient",
+        "powerful", "robust", "solid", "consistent", "seamless", "flawless",
+        
+        # Experience & Emotion
+        "nice", "beautiful", "gorgeous", "stunning", "elegant", "sleek", "clean",
+        "comfortable", "convenient", "helpful", "useful", "handy", "practical",
+        
+        # Positive Action Verbs
+        "works", "fixed", "improved", "upgraded", "enhanced", "solved", "resolved",
+        "delivered", "exceeded", "surprised", "impressed", "blown away",
+        
+        # Colloquial Positive
+        "cool", "neat", "dope", "lit", "fire", "sick", "rad", "epic", "legit",
+        "clutch", "goat", "based", "w", "poggers", "bussin"
+    ]
+
+    NEGATIVE_KEYWORDS = [
+        # Quality Issues
+        "bad", "poor", "terrible", "awful", "horrible", "worst", "garbage", "trash",
+        "crap", "junk", "shit", "sucks", "rubbish", "pathetic", "abysmal", "atrocious",
+        
+        # Problems & Failures
+        "issue", "problem", "bug", "error", "glitch", "crash", "fail", "failure",
+        "broken", "defect", "flaw", "fault", "malfunction", "defective",
+        
+        # Dissatisfaction
+        "hate", "dislike", "regret", "disappointed", "disappointing", "frustrating",
+        "frustrated", "annoyed", "annoying", "irritated", "irritating", "upset",
+        
+        # Performance Issues
+        "slow", "sluggish", "laggy", "buggy", "unstable", "unreliable", "inconsistent",
+        "clunky", "awkward", "confusing", "complicated", "difficult", "hard",
+        
+        # Negative Experiences
+        "waste", "useless", "pointless", "worthless", "overpriced", "expensive",
+        "scam", "ripoff", "rip off", "fraud", "misleading", "deceptive",
+        
+        # Damage & Loss
+        "damage", "damaged", "destroyed", "ruined", "wasted", "lost", "missing",
+        "died", "dead", "killed", "fried", "bricked",
+        
+        # Negative Actions
+        "avoid", "skip", "return", "returned", "refund", "refunded", "cancelled",
+        "uninstalled", "deleted", "removed", "stopped", "quit",
+        
+        # Warnings & Advice Against
+        "don't", "dont", "never", "warning", "beware", "careful", "caution",
+        "not recommend", "stay away", "steer clear",
+        
+        # Colloquial Negative
+        "mid", "trash", "ass", "garbage", "yikes", "oof", "rip", "l", "cringe"
+    ]
+
+    # Context modifiers that strengthen sentiment
+    INTENSIFIERS = [
+        "very", "extremely", "really", "super", "incredibly", "absolutely", "totally",
+        "completely", "utterly", "highly", "so", "too", "exceptionally", "remarkably"
+    ]
+
+    # Negation words that flip sentiment
+    NEGATIONS = [
+        "not", "no", "never", "nothing", "neither", "nowhere", "none", "nobody",
+        "isn't", "aren't", "wasn't", "weren't", "hasn't", "haven't", "hadn't",
+        "doesn't", "don't", "didn't", "won't", "wouldn't", "shouldn't", "couldn't",
+        "can't", "cannot"
+    ]
     def __init__(self):
         """Initialize with j-hartmann emotion model for sentiment analysis"""
         print("🤖 Loading Enhanced Sentiment Analysis Model...")
@@ -74,7 +157,6 @@ class EnhancedSentimentAnalyzer:
             return 'neutral', 0.0
 
 
-
     def analyze_comments_batch(self, comments_data):
         """Analyze comments with detailed sentiment classification"""
         print(f"🚀 Starting enhanced sentiment analysis...")
@@ -114,9 +196,17 @@ class EnhancedSentimentAnalyzer:
                     emotion_result['score']
                 )
                 
-                # Use emotion model result directly
-                final_sentiment = emotion_sentiment
-                final_confidence = abs(emotion_confidence)
+                # ✨ APPLY ADVANCED REBALANCING
+                rebalanced_sentiment, rebalanced_confidence = self.rebalance_neutral_advanced(
+                    sentiment=emotion_sentiment,
+                    emotion_label=emotion_result['label'],
+                    text=texts[i],
+                    conf_sent=abs(emotion_confidence),
+                    conf_emo=emotion_result['score']
+                )
+                
+                final_sentiment = rebalanced_sentiment
+                final_confidence = rebalanced_confidence
                 
                 result = {
                     'id': meta['id'],
@@ -141,6 +231,86 @@ class EnhancedSentimentAnalyzer:
             print(f"🚨 Error in enhanced analysis: {str(e)}")
             print(traceback.format_exc())
             return []
+        
+    def rebalance_neutral_advanced(self, sentiment, emotion_label, text, conf_sent, conf_emo):
+        """
+        Advanced neutral rebalancing with keyword analysis and context awareness
+        """
+        text_lower = text.lower()
+        words = text_lower.split()
+        
+        # Check for negations near keywords
+        def has_negation_nearby(index, window=3):
+            start = max(0, index - window)
+            nearby_words = words[start:index]
+            return any(neg in nearby_words for neg in self.NEGATIONS)
+        
+        # Count positive/negative keywords with negation awareness
+        positive_score = 0
+        negative_score = 0
+        
+        for i, word in enumerate(words):
+            is_negated = has_negation_nearby(i)
+            
+            if word in self.POSITIVE_KEYWORDS:
+                if is_negated:
+                    negative_score += 1  # "not good" becomes negative
+                else:
+                    positive_score += 1
+            
+            if word in self.NEGATIVE_KEYWORDS:
+                if is_negated:
+                    positive_score += 1  # "not bad" becomes positive
+                else:
+                    negative_score += 1
+        
+        # Check for intensifiers
+        has_intensifier = any(intensifier in text_lower for intensifier in self.INTENSIFIERS)
+        
+        # RULE 1: Both sentiment and emotion are neutral
+        if sentiment == "neutral" and emotion_label in ["neutral", "surprise"]:
+            if positive_score > negative_score:
+                if positive_score >= 3 or has_intensifier:
+                    return "positive", 0.65
+                elif positive_score >= 2:
+                    return "positive", 0.55
+            elif negative_score > positive_score:
+                if negative_score >= 3 or has_intensifier:
+                    return "negative", 0.65
+                elif negative_score >= 2:
+                    return "negative", 0.55
+        
+        # RULE 2: Sentiment is neutral but emotion is strong
+        if sentiment == "neutral" and conf_emo > 0.5:
+            if emotion_label in ["joy", "love", "optimism"]:
+                if positive_score > 0:
+                    return "positive", conf_emo * 0.9
+                else:
+                    return "positive", conf_emo * 0.7
+            
+            if emotion_label in ["anger", "sadness", "disgust", "fear"]:
+                if negative_score > 0:
+                    return "negative", conf_emo * 0.9
+                else:
+                    return "negative", conf_emo * 0.7
+        
+        # RULE 3: Override weak sentiment if keywords strongly disagree
+        if sentiment in ["positive", "very_positive"] and conf_sent < 0.6:
+            if negative_score > positive_score + 2:
+                return "negative", 0.6
+        
+        if sentiment in ["negative", "very_negative"] and conf_sent < 0.6:
+            if positive_score > negative_score + 2:
+                return "positive", 0.6
+        
+        # RULE 4: Upgrade sentiment strength if many keywords present
+        if sentiment == "positive" and positive_score >= 3:
+            return "very_positive", min(conf_sent + 0.15, 0.95)
+        
+        if sentiment == "negative" and negative_score >= 3:
+            return "very_negative", min(conf_sent + 0.15, 0.95)
+        
+        return sentiment, conf_sent
 
     def analyze_json_file(self, file_path):
         """Analyze all comments in a JSON file with enhanced sentiment"""
