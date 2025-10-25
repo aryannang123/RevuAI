@@ -169,48 +169,44 @@ class AISummaryGenerator:
         neu_pct = sentiment_breakdown.get('neutral', 0)
 
         prompt = f"""
-You are **Gemini 2.5 Flash**, a top-tier AI market analyst.
-You are analyzing aggregated Reddit sentiment data for **{query}**.
+You are a professional market research analyst. Your job is to convert raw, categorized sentiment data into a clear, concise executive summary for a non-technical stakeholder (like a Product Manager or marketing lead).
 
-Use this data only as background context (≈25%), and rely mainly (≈75%) on your own reasoning and analytical insight.
+The stakeholder will also be viewing pie charts and bar graphs that show the *percentage* of each sentiment (Positive, Negative, etc.).
 
-Your summary must be:
-- **Structured into two clear sections:**  
-  🔹 Positive Insights  
-  🔸 Negative Insights  
-- Each section should have **3–4 concise bullet points**, 1–2 sentences each.  
-- Focus on what people *feel* and what that *means* — include logical reasoning, not just repetition.  
-- Keep it under 250 words total.  
-- Make each insight rich in meaning and interpretation, not filler text.
+**Your task is to write a summary that explains the "WHY" behind those percentages.** Do NOT simply state the counts or percentages (e.g., "There are 50 positive comments"). Instead, synthesize the *key themes* from the comments in each category.
 
 ---
 
-DATA SNAPSHOT:
-• {total_comments:,} Reddit comments analyzed  
-• Sentiment: {pos_pct:.1f}% positive, {neg_pct:.1f}% negative, {neu_pct:.1f}% neutral  
-• Overall sentiment: {overall_sentiment}  
-• Positive themes: {', '.join(insights['positive_themes']) or 'general appreciation'}  
-• Common concerns: {', '.join(insights['user_concerns']) or 'minor dissatisfaction'}
+**Product/Topic:**
+{query}
+
+**Data Overview:**
+- Total Comments Analyzed: {total_comments}
+- Sentiment Distribution: {pos_pct:.1f}% Positive, {neg_pct:.1f}% Negative, {neu_pct:.1f}% Neutral
+- Overall Sentiment: {overall_sentiment.title()}
+
+**Key Insights:**
+- Positive Themes: {', '.join(insights['positive_themes'])}
+- User Concerns: {', '.join(insights['user_concerns'])}
+
+**Sample Comments:**
+Positive:
+{chr(10).join(f"- {c.get('text', '')}" for c in positive_comments[:3])}
+
+Negative:
+{chr(10).join(f"- {c.get('text', '')}" for c in negative_comments[:3])}
 
 ---
 
-### OUTPUT FORMAT EXAMPLE
-🔹 **Positive Insights**
-1. ...
-2. ...
-3. ...
-4. ...
+**Instructions for the Summary:**
 
-🔸 **Negative Insights**
-1. ...
-2. ...
-3. ...
-4. ...
+1.  **Start with an "Overall Sentiment"**: Give a 1-2 sentence high-level overview. (e.g., "Public sentiment for the {query} is largely positive, driven by strong appreciation for its new features, though there are notable concerns about its price.")
+2.  **Positive Highlights**: In a bulleted list, summarize the 2-3 main themes people *love*. What specific features or aspects are praised?
+3.  **Negative Pain Points**: In a bulleted list, summarize the 2-3 most common *complaints* or *problems*. What is driving the negative feedback?
+4.  **Mixed & Neutral Observations**: Briefly mention any common themes from the mixed/neutral comments. This often includes feature requests, points of confusion, or "it's good, but..." statements.
 
----
-
-Now, generate your short and detailed analytical summary using this format.
-Be professional, insightful, and concise.
+Keep the language clear, professional, and directly actionable.
+remove all unnecessary words like here is the summary
 """
         return prompt
 
