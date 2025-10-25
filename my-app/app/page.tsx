@@ -34,8 +34,27 @@ export default function Home() {
   useEffect(() => {
     const verifyUser = async () => {
       const { data } = await supabase.auth.getUser();
-      if (!data?.user) router.push("/login");
-      else setUser(data.user);
+      if (!data?.user) {
+        router.push("/login");
+      } else {
+        setUser(data.user);
+        
+        // Quick database connectivity check
+        try {
+          const { error: dbError } = await supabase
+            .from("searches")
+            .select("count", { count: "exact", head: true });
+          
+          if (dbError) {
+            console.warn("⚠️ Database table not accessible:", dbError);
+            console.log("💡 Run the SQL scripts in database/ folder to set up the searches table");
+          } else {
+            console.log("✅ Database connection verified");
+          }
+        } catch (error) {
+          console.warn("⚠️ Database check failed:", error);
+        }
+      }
     };
     verifyUser();
   }, [router]);
@@ -66,34 +85,98 @@ export default function Home() {
     return () => evtSource.close();
   }, [isLoading]);
 
-  // 💾 Save search + analysis data
-  const saveSearch = async (query: string, data: any) => {
-    if (!user) return;
+  // 💾 Save search info (without analysis data for now)
+  const saveSearch = async (query: string) => {
+    if (!user) {
+      console.warn("⚠️ No user found, skipping search save");
+      return;
+    }
 
     try {
-      await supabase
+      console.log(`💾 Saving search to Supabase: ${query}`);
+      console.log(`👤 User ID: ${user.id}`);
+      console.log(`📧 User Email: ${user.email}`);
+      
+      // First, let's test if we can connect to Supabase at all
+      const { data: testData, error: testError } = await supabase
         .from("searches")
-        .upsert(
-          [
-            {
-              user_id: user.id,
-              user_email: user.email,
-              search_query: query,
-              analysis_data: data, // 🧠 save processed JSON
-              status: "completed",
-            },
-          ],
-          {
-            onConflict: "user_id,search_query",
-            ignoreDuplicates: false, // overwrite previous search results
-          }
-        );
+        .select("count", { count: "exact", head: true });
+      
+      if (testError) {
+        console.error("❌ Cannot access searches table:", testError);
+        console.log("💡 Make sure to run the SQL scripts in database/ folder");
+        throw new Error(`Table access failed: ${testError.message || JSON.stringify(testError)}`);
+      }
+      
+      console.log("✅ Searches table accessible");
+      
+      const searchData = {
+        user_id: user.id,
+        user_email: user.email,
+        search_query: query,
+        analysis_data: null, // 🔄 Will be implemented later
+        status: "completed",
+      };
+      
+      console.log("📝 Data to insert:", searchData);
+      
+      // Check if record already exists
+      const { data: existingRecord } = await supabase
+        .from("searches")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("search_query", query)
+        .single();
+      
+      let result, error;
+      
+      if (existingRecord) {
+        // Update existing record
+        console.log("🔄 Updating existing search record");
+        const updateResult = await supabase
+          .from("searches")
+          .update({
+            user_email: user.email,
+            analysis_data: null,
+            status: "completed",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingRecord.id)
+          .select();
+        
+        result = updateResult.data;
+        error = updateResult.error;
+      } else {
+        // Insert new record
+        console.log("➕ Inserting new search record");
+        const insertResult = await supabase
+          .from("searches")
+          .insert([searchData])
+          .select();
+        
+        result = insertResult.data;
+        error = insertResult.error;
+      }
+
+      if (error) {
+        console.error("❌ Supabase upsert error:", error);
+        console.error("❌ Error details:", JSON.stringify(error, null, 2));
+        throw new Error(`Upsert failed: ${error.message || JSON.stringify(error)}`);
+      }
 
       console.log(`✅ Search saved to Supabase: ${query}`);
+      console.log("📊 Result:", result);
+      
       // Notify sidebar (optional real-time refresh)
       window.dispatchEvent(new Event("refreshHistory"));
-    } catch (error) {
-      console.error("Error saving search:", error);
+    } catch (error: any) {
+      console.error("❌ Error saving search to database:", error);
+      console.error("❌ Error type:", typeof error);
+      console.error("❌ Error message:", error?.message || "Unknown error");
+      console.error("❌ Full error object:", JSON.stringify(error, null, 2));
+      
+      // Don't throw the error - continue with the analysis even if DB save fails
+      console.log("🔄 Continuing with analysis despite database error");
     }
   };
 
@@ -128,8 +211,10 @@ export default function Home() {
       sessionStorage.setItem("reddit_data", JSON.stringify(data));
       sessionStorage.setItem("search_query", searchTerm);
 
-      // 💾 Save to Supabase
-      await saveSearch(searchTerm, data);
+      // 💾 Save to Supabase (without analysis data for now)
+      console.log("🎯 About to save search to database...");
+      await saveSearch(searchTerm);
+      console.log("✅ Search save attempt completed");
 
       // 🧊 Step 1: Fill progress to 100%
       setProgressPercent(1);

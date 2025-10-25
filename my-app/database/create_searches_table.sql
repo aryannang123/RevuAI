@@ -6,6 +6,7 @@ CREATE TABLE searches (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   user_email TEXT,
   search_query TEXT NOT NULL,
+  analysis_data JSONB, -- Store the complete analysis results
   status TEXT DEFAULT 'completed' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -15,6 +16,10 @@ CREATE TABLE searches (
 CREATE INDEX idx_searches_user_id ON searches(user_id);
 CREATE INDEX idx_searches_created_at ON searches(created_at);
 CREATE INDEX idx_searches_status ON searches(status);
+CREATE INDEX idx_searches_analysis_data ON searches USING GIN (analysis_data);
+
+-- Create unique constraint for user_id + search_query combination
+CREATE UNIQUE INDEX idx_searches_user_query_unique ON searches(user_id, search_query);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE searches ENABLE ROW LEVEL SECURITY;
