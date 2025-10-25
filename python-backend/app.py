@@ -112,12 +112,15 @@ def fetch_mass_comments():
                 print(f"✅ Enhanced sentiment analysis saved to: {sentiment_file}")
 
                 
-                # Add sentiment summary to the result
+                # Add comprehensive sentiment analysis to the result
                 result['sentiment_analysis'] = {
                     'file': sentiment_file,
                     'summary': sentiment_result['sentiment_breakdown_5class'],
                     'overall_sentiment': sentiment_result['overall_sentiment'],
-                    'dominant_emotion': sentiment_result.get('emotion_breakdown', {})
+                    'dominant_emotion': sentiment_result.get('emotion_breakdown', {}),
+                    'ai_summary': sentiment_result.get('ai_summary', {}),
+                    'top_comments': sentiment_result.get('top_comments', {}),
+                    'total_analyzed': sentiment_result.get('total_comments_analyzed', 0)
                 }
             else:
                 print("⚠️ Enhanced sentiment analysis failed")

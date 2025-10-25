@@ -259,6 +259,43 @@ class EnhancedSentimentAnalyzer:
                 'all_comments': analyzed_comments
             }
             
+            # Generate AI summary using Gemini
+            print(f"🤖 Generating AI summary with Gemini...")
+            try:
+                from ai_summary_generator import AISummaryGenerator
+                ai_generator = AISummaryGenerator()
+                
+                # Prepare data for AI summary (convert to expected format)
+                summary_data = {
+                    'metadata': {
+                        'total_comments_analyzed': total_analyzed,
+                        'sentiment_breakdown': {
+                            'positive': sentiment_percentages['very_positive'] + sentiment_percentages['positive'],
+                            'negative': sentiment_percentages['very_negative'] + sentiment_percentages['negative'],
+                            'neutral': sentiment_percentages['neutral']
+                        },
+                        'overall_sentiment': dominant_sentiment,
+                        'raw_counts': dict(sentiment_counts)
+                    },
+                    'summary': {
+                        'top_positive_comments': top_very_positive,
+                        'top_negative_comments': top_very_negative
+                    }
+                }
+                
+                ai_summary = ai_generator.generate_paragraph_summary(summary_data, analysis_result['query'])
+                analysis_result['ai_summary'] = ai_summary
+                print(f"✅ AI summary generated successfully!")
+                
+            except Exception as e:
+                print(f"⚠️ AI summary generation failed: {e}")
+                analysis_result['ai_summary'] = {
+                    'paragraph_summary': f"Analysis of {total_analyzed} comments about '{analysis_result['query']}' shows {dominant_sentiment.replace('_', ' ')} sentiment overall.",
+                    'generated_at': datetime.now().isoformat(),
+                    'model_used': 'fallback',
+                    'error': str(e)
+                }
+            
             # Print detailed summary
             print(f"\n{'='*60}")
             print(f"✅ Enhanced Analysis Complete!")
