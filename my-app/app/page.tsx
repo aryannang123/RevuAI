@@ -14,6 +14,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
 const IRIDESCENCE_COLOR = [0.3, 0.6, 1];
 
 export default function Home() {
@@ -65,54 +66,88 @@ export default function Home() {
     return () => evtSource.close();
   }, [isLoading]);
 
+  // 💾 Save search + analysis data
+  const saveSearch = async (query: string, data: any) => {
+    if (!user) return;
+
+    try {
+      await supabase
+        .from("searches")
+        .upsert(
+          [
+            {
+              user_id: user.id,
+              user_email: user.email,
+              search_query: query,
+              analysis_data: data, // 🧠 save processed JSON
+              status: "completed",
+            },
+          ],
+          {
+            onConflict: "user_id,search_query",
+            ignoreDuplicates: false, // overwrite previous search results
+          }
+        );
+
+      console.log(`✅ Search saved to Supabase: ${query}`);
+      // Notify sidebar (optional real-time refresh)
+      window.dispatchEvent(new Event("refreshHistory"));
+    } catch (error) {
+      console.error("Error saving search:", error);
+    }
+  };
+
   // 🚀 Handle Reddit Search
-const handleSearch = useCallback(async () => {
-  const searchTerm = searchQuery.trim();
-  if (!searchTerm) return setError("Please enter a search query");
+  const handleSearch = useCallback(async () => {
+    const searchTerm = searchQuery.trim();
+    if (!searchTerm) return setError("Please enter a search query");
 
-  setError(null);
-  setIsLoading(true);
-  setProgressStage("Initializing...");
-  setProgressPercent(0);
+    setError(null);
+    setIsLoading(true);
+    setProgressStage("Initializing...");
+    setProgressPercent(0);
 
-  try {
-    const BACKEND_URL =
-      process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
+    try {
+      const BACKEND_URL =
+        process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
 
-    const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: searchTerm,
-        target_comments: 2000,
-        min_score: 2,
-      }),
-    });
+      const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: searchTerm,
+          target_comments: 2000,
+          min_score: 2,
+        }),
+      });
 
-    if (!response.ok) throw new Error("Failed to fetch Reddit data");
-    const data = await response.json();
+      if (!response.ok) throw new Error("Failed to fetch Reddit data");
+      const data = await response.json();
 
-    sessionStorage.setItem("reddit_data", JSON.stringify(data));
-    sessionStorage.setItem("search_query", searchTerm);
+      // Save locally for analysis page
+      sessionStorage.setItem("reddit_data", JSON.stringify(data));
+      sessionStorage.setItem("search_query", searchTerm);
 
-    // 🧊 Step 1: Ensure the water fills fully
-    setProgressPercent(1); // fill to 100%
-    setProgressStage("Finalizing results");
+      // 💾 Save to Supabase
+      await saveSearch(searchTerm, data);
 
-    // 🧊 Step 2: Keep loader animating a bit longer
-    await new Promise((resolve) => setTimeout(resolve, 1500)); // keep it visible while full
+      // 🧊 Step 1: Fill progress to 100%
+      setProgressPercent(1);
+      setProgressStage("Finalizing results");
 
-    // 🧊 Step 3: Fade out + navigate
-    setIsLoading(false); // triggers fade-out in loader
-    await new Promise((resolve) => setTimeout(resolve, 800)); // allow fade-out
-    router.push("/analysis");
-  } catch (e: any) {
-    console.error(e);
-    setError(e.message || "An unexpected error occurred");
-    setIsLoading(false);
-  }
-}, [searchQuery, router]);
+      // 🧊 Step 2: Smooth finish animation
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      setIsLoading(false);
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
+      // 🧊 Step 3: Go to analysis page
+      router.push("/analysis");
+    } catch (e: any) {
+      console.error(e);
+      setError(e.message || "An unexpected error occurred");
+      setIsLoading(false);
+    }
+  }, [searchQuery, router, user]);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !isLoading) {
@@ -252,7 +287,11 @@ const handleSearch = useCallback(async () => {
                     stroke="white"
                     className="w-5 h-5"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M17 8l4 4m0 0l-4 4m4-4H3"
+                    />
                   </svg>
                 )}
               </button>
