@@ -264,15 +264,17 @@ You are a professional market research analyst analyzing user sentiment for {que
 • Users praise the performance and speed improvements compared to previous models
 • Many appreciate the enhanced camera quality and photo processing capabilities  
 • The build quality and premium design receive consistent positive feedback
+• Battery efficiency and optimization features are well-received by daily users
 
 **NEGATIVE INSIGHTS:**
 • Battery life concerns are frequently mentioned by users in daily usage scenarios
 • Price point is considered too high by many potential buyers and existing users
 • Some users report heating issues during intensive tasks and gaming sessions
+• Software bugs and occasional crashes frustrate users during regular usage
 
 **INSTRUCTIONS:**
 - Use EXACTLY the format above with "**POSITIVE INSIGHTS:**" and "**NEGATIVE INSIGHTS:**"
-- Each section must have exactly 3 bullet points using "•" 
+- Each section must have exactly 4 bullet points using "•" 
 - Base insights on the actual comments provided
 - Keep each point to 1-2 sentences maximum
 - Be specific and actionable, avoid generic statements
