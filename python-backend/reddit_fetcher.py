@@ -103,9 +103,15 @@ class MultiAccountRedditFetcher:
             
             return token_data['access_token']
     
-    def _is_relevant(self, text: str, query: str) -> bool:
+    def _is_relevant(self, text: str, query: str, relaxed: bool = False) -> bool:
         """
         Check if text is relevant to search query
+        
+        Args:
+            text: Text to check
+            query: Search query
+            relaxed: If True, accept partial matches (for low-engagement queries)
+        
         Returns True if query terms appear in text
         """
         if not text or not query:
@@ -114,20 +120,33 @@ class MultiAccountRedditFetcher:
         text_lower = text.lower()
         query_lower = query.lower()
         
-        # Split query into terms (handle multi-word queries)
+        # Split query into terms
         query_terms = query_lower.split()
         
         # For single word: direct match
         if len(query_terms) == 1:
             return query_lower in text_lower
         
-        # For multi-word: check if full phrase OR all terms present
-        # Example: "iphone 15" -> check for "iphone 15" OR ("iphone" AND "15")
-        if query_lower in text_lower:
-            return True
+        # STRICT MODE (high engagement): Full phrase OR all terms
+        if not relaxed:
+            # Check for exact phrase
+            if query_lower in text_lower:
+                return True
+            # Check if all terms present
+            return all(term in text_lower for term in query_terms)
         
-        # Check if all individual terms present
-        return all(term in text_lower for term in query_terms)
+        # 🆕 RELAXED MODE (low engagement): Any majority of terms
+        # Example: "iphone 15 pro" → accept if 2 of 3 terms present
+        else:
+            # Check for exact phrase first
+            if query_lower in text_lower:
+                return True
+            
+            # Accept if majority of terms present (>50%)
+            terms_present = sum(1 for term in query_terms if term in text_lower)
+            required_terms = max(1, len(query_terms) // 2 + 1)  # Majority
+            
+            return terms_present >= required_terms
     
     def fetch_posts_batch(
         self,
@@ -135,9 +154,10 @@ class MultiAccountRedditFetcher:
         limit: int = 100,
         sort: str = 'top',
         time_filter: str = 'month',
-        account_idx: int = 0
+        account_idx: int = 0,
+        relaxed: bool = False
     ) -> List[Dict]:
-        """Fetch posts with media filtering and relevance check"""
+        """Fetch posts with adaptive filtering"""
         token = self.get_access_token(account_idx)
         
         url = (
@@ -165,7 +185,7 @@ class MultiAccountRedditFetcher:
         data = response.json()
         posts = data['data']['children']
         
-        # ✅ FILTER: Remove media-heavy posts + relevance check
+        # ✅ ADAPTIVE FILTER: Relaxed for low-engagement queries
         text_posts = []
         for post in posts:
             p = post['data']
@@ -181,13 +201,14 @@ class MultiAccountRedditFetcher:
             if not selftext and len(title) < 20:
                 continue
             
-            # Skip low engagement posts
-            if p.get('num_comments', 0) < 5:
+            # 🆕 ADAPTIVE: Lower engagement threshold for low-engagement queries
+            min_comments = 2 if relaxed else 5
+            if p.get('num_comments', 0) < min_comments:
                 continue
             
-            # ✅ NEW: Relevance check - title OR selftext must contain query
+            # ✅ Relevance check with adaptive mode
             combined_text = f"{title} {selftext}"
-            if not self._is_relevant(combined_text, query):
+            if not self._is_relevant(combined_text, query, relaxed=relaxed):
                 continue
             
             text_posts.append(post)
@@ -200,9 +221,10 @@ class MultiAccountRedditFetcher:
         limit: int = 50,
         min_score: int = 5,
         account_idx: int = 0,
-        query: str = ""
+        query: str = "",
+        relaxed: bool = False
     ) -> List[Dict]:
-        """Fetch only essential comment data with relevance filtering"""
+        """Fetch comments with adaptive relevance filtering"""
         token = self.get_access_token(account_idx)
         
         clean_permalink = permalink[1:] if permalink.startswith('/') else permalink
@@ -243,17 +265,21 @@ class MultiAccountRedditFetcher:
                 score = c.get('score', 0)
                 body = c.get('body', '').strip()
                 
-                # ✅ FILTER: Quality checks
+                # ✅ ADAPTIVE: Quality checks
                 if score < min_score:
                     continue
-                if len(body) < 10:
+                
+                # 🆕 Relaxed mode: Accept shorter comments
+                min_length = 5 if relaxed else 10
+                if len(body) < min_length:
                     continue
+                
                 if body in ['[deleted]', '[removed]']:
                     continue
                 
-                # ✅ NEW: Relevance check - comment OR post title must contain query
+                # ✅ Relevance check with adaptive mode
                 combined_text = f"{post_title} {body}"
-                if query and not self._is_relevant(combined_text, query):
+                if query and not self._is_relevant(combined_text, query, relaxed=relaxed):
                     continue
                 
                 lightweight_comments.append({
@@ -263,8 +289,9 @@ class MultiAccountRedditFetcher:
                     'post_title': post_title
                 })
                 
-                # Process replies (limit depth to 3 levels)
-                if depth < 3:
+                # Process replies (deeper in relaxed mode)
+                max_depth = 4 if relaxed else 3
+                if depth < max_depth:
                     replies = c.get('replies', {})
                     if isinstance(replies, dict) and 'data' in replies:
                         extract_comments(replies['data'].get('children', []), depth + 1)
@@ -272,7 +299,6 @@ class MultiAccountRedditFetcher:
         extract_comments(comments_data)
         
         return lightweight_comments
-    
     def fetch_mass_comments(
         self,
         query: str,
@@ -281,61 +307,60 @@ class MultiAccountRedditFetcher:
         progress_callback=None
     ) -> Dict[str, Any]:
         """
-        Ultra-fast mass fetch optimized for 4 accounts
-        Expected: ~60 comments/sec
+        Ultra-fast mass fetch optimized for 4 accounts.
+        Improved adaptive logic:
+        1) Fetch posts in strict mode to measure engagement.
+        2) Decide if query is low-engagement using post statistics.
+        3) Use that decision (relaxed=True/False) when fetching comments.
         """
-        
         print(f"\n{'='*60}")
         print(f"🚀 ULTRA-FAST MODE (4 Accounts)")
         print(f"   Target: {target_comments:,} comments")
         print(f"   Min Score: {min_score}")
         print(f"{'='*60}\n")
-        
+
         start_time = time.time()
         all_comments = {}
-        
-        # ===== PHASE 1: Parallel Post Fetching =====
+
+        # ===== PHASE 1: Parallel Post Fetching (initial, STRICT) =====
         if progress_callback:
             progress_callback(0, 100, 'Fetching posts')
-        
-        # 12 strategies prioritizing relevance for better quality results
+
         strategies = [
-            {'sort': 'relevance', 't': 'all'},      # Highest priority - most relevant
-            {'sort': 'relevance', 't': 'year'},     # Recent relevant content
-            {'sort': 'relevance', 't': 'month'},    # Very recent relevant content
-            {'sort': 'top', 't': 'month'},          # High quality recent posts
-            {'sort': 'top', 't': 'year'},           # High quality posts
-            {'sort': 'comments', 't': 'month'},     # Posts with lots of discussion
-            {'sort': 'top', 't': 'week'},           # Recent high quality
-            {'sort': 'hot', 't': 'month'},          # Trending content
-            {'sort': 'top', 't': 'all'},            # All-time best
-            {'sort': 'comments', 't': 'week'},      # Recent discussions
-            {'sort': 'hot', 't': 'week'},           # Recent trending
-            {'sort': 'top', 't': 'day'}             # Today's best
+            {'sort': 'top', 't': 'month'},
+            {'sort': 'top', 't': 'year'},
+            {'sort': 'relevance', 't': 'all'},
+            {'sort': 'comments', 't': 'month'},
+            {'sort': 'top', 't': 'week'},
+            {'sort': 'hot', 't': 'month'},
+            {'sort': 'top', 't': 'all'},
+            {'sort': 'hot', 't': 'week'},
+            {'sort': 'relevance', 't': 'month'},
+            {'sort': 'top', 't': 'day'},
+            {'sort': 'hot', 't': 'day'},
+            {'sort': 'comments', 't': 'week'}
         ]
-        
+
         all_posts = []
-        
-        # 12 workers for 4 accounts = 3 workers per account
         max_workers = min(len(self.accounts) * 3, 12)
-        
-        print(f"Phase 1: Fetching posts ({max_workers} workers)...")
-        
+
+        print(f"Phase 1: Fetching posts ({max_workers} workers) -- initial strict sampling...")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_strategy = {}
-            
             for idx, strategy in enumerate(strategies):
                 account_idx = idx % len(self.accounts)
+                # ALWAYS fetch posts in strict mode for a representative sample
                 future = executor.submit(
                     self.fetch_posts_batch,
                     query=query,
                     limit=100,
                     sort=strategy['sort'],
                     time_filter=strategy['t'],
-                    account_idx=account_idx
+                    account_idx=account_idx,
+                    relaxed=False
                 )
                 future_to_strategy[future] = (strategy, account_idx)
-            
+
             for future in as_completed(future_to_strategy.keys()):
                 strategy, acc_idx = future_to_strategy[future]
                 try:
@@ -344,64 +369,90 @@ class MultiAccountRedditFetcher:
                     print(f"  ✓ {strategy['sort']}/{strategy['t']} (Acc {acc_idx + 1}): {len(posts)} posts")
                 except Exception as e:
                     print(f"  ✗ {strategy['sort']}/{strategy['t']} failed: {e}")
-        
+
         # Deduplicate and sort by engagement
         unique_posts = {p['data']['id']: p for p in all_posts}
         all_posts = list(unique_posts.values())
         all_posts.sort(key=lambda p: p['data'].get('num_comments', 0), reverse=True)
-        
+
         phase1_time = time.time() - start_time
         print(f"✓ Phase 1: {len(all_posts)} posts in {phase1_time:.1f}s\n")
-        
-        # ===== PHASE 2: Aggressive Comment Fetching =====
+
+        # ===== Decide adaptive mode based on post engagement statistics =====
+        # Compute basic stats (use num_comments)
+        comment_counts = [p['data'].get('num_comments', 0) for p in all_posts if isinstance(p.get('data'), dict)]
+        median_comments = 0
+        mean_comments = 0
+        top5_avg = 0
+
+        if comment_counts:
+            sorted_counts = sorted(comment_counts)
+            n = len(sorted_counts)
+            # median
+            if n % 2 == 1:
+                median_comments = sorted_counts[n // 2]
+            else:
+                median_comments = (sorted_counts[n // 2 - 1] + sorted_counts[n // 2]) / 2
+            mean_comments = sum(sorted_counts) / n
+            top_n = min(5, n)
+            top5_avg = sum(sorted_counts[-top_n:]) / top_n if top_n > 0 else 0
+
+        # Adaptive decision rules (tweak these thresholds if you want)
+        # Consider LOW engagement if typical posts have very few comments.
+        # Criteria (any true => low engagement):
+        #  - median_comments < 5
+        #  - mean_comments < 10
+        #  - top5_avg < 8
+        is_low_engagement = (median_comments < 5) or (mean_comments < 10) or (top5_avg < 8)
+
+        adaptive_mode = 'relaxed' if is_low_engagement else 'strict'
+        print("🧾 Engagement stats:")
+        print(f"   Posts sampled: {len(comment_counts)}")
+        print(f"   median_comments: {median_comments}")
+        print(f"   mean_comments: {mean_comments:.2f}")
+        print(f"   top5_avg: {top5_avg:.2f}")
+        print(f"🧠 Adaptive Mode chosen: {'Relaxed (low engagement)' if is_low_engagement else 'Strict (high engagement)'}\n")
+
+        # ===== PHASE 2: Aggressive Comment Fetching (use decided mode) =====
         if progress_callback:
             progress_callback(20, 100, 'Fetching comments')
-        
+
         comments_per_post = 30
         estimated_posts = (target_comments // comments_per_post) + 100
         posts_to_process = all_posts[:min(estimated_posts, len(all_posts))]
-        
+
         print(f"Phase 2: Processing {len(posts_to_process)} posts...")
-        
-        # 16 workers for 4 accounts = 4 workers per account
         max_workers = min(len(self.accounts) * 4, 16)
-        
         print(f"  Using {max_workers} parallel workers\n")
-        
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_info = {}
-            
             for idx, post in enumerate(posts_to_process):
                 account_idx = idx % len(self.accounts)
                 permalink = post['data']['permalink']
-                
                 future = executor.submit(
                     self.fetch_comments_lightweight,
                     permalink=permalink,
                     limit=100,
                     min_score=min_score,
                     account_idx=account_idx,
-                    query=query  # Pass query for relevance filtering
+                    query=query,
+                    relaxed=is_low_engagement
                 )
                 future_to_info[future] = (idx, account_idx)
-            
+
             completed = 0
             last_log = time.time()
-            
+
             for future in as_completed(future_to_info.keys()):
                 idx, acc_idx = future_to_info[future]
-                
                 try:
                     comments = future.result()
-                    
-                    # Add comments (dedup by ID)
                     for comment in comments:
                         if comment['id'] not in all_comments:
                             all_comments[comment['id']] = comment
-                    
                     completed += 1
-                    
-                    # Log every 2 seconds
+                    # Log every ~2 seconds
                     if time.time() - last_log >= 2:
                         current = len(all_comments)
                         progress = min(20 + int((current / target_comments) * 70), 90)
@@ -409,57 +460,51 @@ class MultiAccountRedditFetcher:
                             progress_callback(progress, 100, f'Comments: {current:,}/{target_comments:,}')
                         print(f"  Progress: {current:,} comments ({completed}/{len(posts_to_process)} posts)")
                         last_log = time.time()
-                    
                     # Stop when target reached
                     if len(all_comments) >= target_comments:
                         break
-                
                 except Exception as e:
-                    if '429' in str(e):
-                        print(f"  ⚠️ Rate limit (Acc {acc_idx + 1})")
-        
+                    print(f"  ⚠️ Error fetching comments (Acc {acc_idx + 1}): {e}")
+
         # ===== FINALIZE =====
         final_comments = list(all_comments.values())
         final_comments.sort(key=lambda c: c['score'], reverse=True)
         final_comments = final_comments[:target_comments]
-        
+
         elapsed = time.time() - start_time
-        
         if progress_callback:
             progress_callback(100, 100, 'Complete')
-        
-        # Stats
-        scores = [c['score'] for c in final_comments]
-        unique_posts = set(c['post_title'] for c in final_comments)
-        
+
+        scores = [c['score'] for c in final_comments] if final_comments else []
+        unique_posts_set = set(c['post_title'] for c in final_comments) if final_comments else set()
+
         print(f"\n{'='*60}")
         print(f"✅ FETCH COMPLETE")
         print(f"   Comments: {len(final_comments):,}")
-        print(f"   Posts: {len(unique_posts):,}")
-        print(f"   Filtered: {len(all_comments) - len(final_comments):,} (relevance + quality)")
+        print(f"   Posts: {len(unique_posts_set):,}")
         print(f"   Time: {elapsed:.1f}s ({elapsed/60:.1f} min)")
         print(f"   Speed: {len(final_comments)/elapsed:.1f} comments/sec")
-        print(f"   Per Account: {len(final_comments)/(elapsed*len(self.accounts)):.1f} c/s/acc")
         print(f"{'='*60}\n")
-        
+
         return {
             'comments': final_comments,
             'metadata': {
                 'query': query,
                 'totalComments': len(final_comments),
-                'totalPosts': len(unique_posts),
+                'totalPosts': len(unique_posts_set),
                 'targetComments': target_comments,
                 'minScore': min_score,
                 'averageScore': round(sum(scores) / len(scores)) if scores else 0,
                 'minScoreValue': min(scores) if scores else 0,
                 'maxScoreValue': max(scores) if scores else 0,
                 'fetchTime': round(elapsed, 2),
-                'commentsPerSecond': round(len(final_comments) / elapsed, 2),
+                'commentsPerSecond': round(len(final_comments) / elapsed, 2) if elapsed > 0 else 0,
                 'accountsUsed': len(self.accounts),
                 'fetchedAt': datetime.utcnow().isoformat(),
                 'source': 'Reddit API (4-Account Ultra-Fast)',
                 'relevanceFiltering': True,
-                'filteringNote': 'Only comments/posts containing query terms are included'
+                'adaptiveMode': adaptive_mode,
+                'filteringNote': 'Adaptive filtering: strict for high-engagement, relaxed for low-engagement (decided from post stats)'
             }
         }
 
