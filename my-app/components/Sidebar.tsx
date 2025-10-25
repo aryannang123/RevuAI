@@ -14,7 +14,7 @@ interface SearchHistory {
   search_query: string;
   created_at: string;
   status: string;
-  analysis_data?: any; // 🆕 new column for analysis data
+  analysis_data?: any; // 🧠 JSON data from Supabase
 }
 
 interface SidebarProps {
@@ -29,17 +29,15 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
   const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 🧠 Fetch user + their search history
   useEffect(() => {
     const fetchUserAndHistory = async () => {
       try {
-        // Get current user
         const { data: userData, error: userError } = await supabase.auth.getUser();
         if (userError) throw userError;
-
         setUser(userData.user);
 
         if (userData.user) {
-          // Fetch search history from Supabase directly
           const { data, error } = await supabase
             .from("searches")
             .select("id, search_query, status, created_at, analysis_data")
@@ -50,13 +48,18 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
           setSearchHistory(data || []);
         }
       } catch (error) {
-        console.error("Error fetching user or history:", error);
+        console.error("⚠️ Error fetching user or history:", error);
       } finally {
         setLoading(false);
       }
     };
 
     if (isOpen) fetchUserAndHistory();
+
+    // Optional live-refresh support
+    const refreshListener = () => fetchUserAndHistory();
+    window.addEventListener("refreshHistory", refreshListener);
+    return () => window.removeEventListener("refreshHistory", refreshListener);
   }, [isOpen]);
 
   const formatDate = (dateString: string) => {
@@ -102,6 +105,7 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
             </button>
           </div>
 
+          {/* Loading Spinner */}
           {loading ? (
             <div className="flex items-center justify-center p-8">
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-white/30 border-t-white"></div>
@@ -163,22 +167,27 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
                       <div
                         key={search.id}
                         onClick={() => {
-                          if (search.analysis_data) {
-                            // 🧠 Load analysis data if available
-                            sessionStorage.setItem(
-                              "reddit_data",
-                              JSON.stringify(search.analysis_data)
-                            );
-                            sessionStorage.setItem(
-                              "search_query",
-                              search.search_query
-                            );
-                            router.push("/analysis");
-                          } else {
-                            // If no analysis data, trigger a fresh search
-                            onSearchSelect(search.search_query);
+                          try {
+                            if (search.analysis_data) {
+                              // ✅ Load analysis data directly
+                              sessionStorage.setItem(
+                                "reddit_data",
+                                JSON.stringify(search.analysis_data)
+                              );
+                              sessionStorage.setItem(
+                                "search_query",
+                                search.search_query
+                              );
+                              router.push("/analysis");
+                            } else {
+                              // 🧩 Fallback: re-run analysis if empty
+                              onSearchSelect(search.search_query);
+                            }
+                          } catch (err) {
+                            console.error("Error loading saved analysis:", err);
+                          } finally {
+                            onClose();
                           }
-                          onClose();
                         }}
                         className="group p-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 cursor-pointer transition-all duration-200"
                       >
