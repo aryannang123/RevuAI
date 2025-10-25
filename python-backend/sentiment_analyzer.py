@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Fixed Reddit Comment Sentiment Analysis with GPU Acceleration
-Optimized for speed and accuracy with proper label mapping
+Optimized for speed and accuracy with universal GPU detection
 """
 
 import json
@@ -13,8 +13,49 @@ import warnings
 from collections import Counter
 warnings.filterwarnings("ignore")
 
-# Import GPU configuration
-from fast_sentiment_config import DEVICE, DEVICE_NAME, MAX_BATCH_SIZE, TRUNCATE_LENGTH
+# ==============================================================
+# 🌍 UNIVERSAL GPU AUTO-DETECTION (CUDA / MPS / DirectML / CPU)
+# ==============================================================
+
+def get_best_device():
+    try:
+        # 1️⃣ CUDA (NVIDIA)
+        if torch.cuda.is_available():
+            print("✅ Using NVIDIA GPU (CUDA)")
+            return "cuda", "NVIDIA CUDA"
+
+        # 2️⃣ Apple Silicon (MPS)
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            print("✅ Using Apple GPU (MPS)")
+            return "mps", "Apple MPS"
+
+        # 3️⃣ DirectML (Intel / AMD / fallback)
+        try:
+            import onnxruntime as ort
+            providers = ort.get_available_providers()
+            if "DmlExecutionProvider" in providers:
+                print("✅ Using GPU via ONNX Runtime DirectML")
+                return "onnxruntime", "DirectML"
+        except Exception:
+            pass
+
+        # 4️⃣ CPU fallback
+        print("⚙️ Using CPU (no GPU found)")
+        return "cpu", "CPU"
+
+    except Exception as e:
+        print(f"⚠️ Error detecting GPU: {e}")
+        return "cpu", "CPU"
+
+# Get and print the best available device
+DEVICE, DEVICE_NAME = get_best_device()
+MAX_BATCH_SIZE = 16
+TRUNCATE_LENGTH = 512
+
+
+# ==============================================================
+# 💬 Reddit Sentiment Analyzer Class (Functionality Unchanged)
+# ==============================================================
 
 class RedditSentimentAnalyzer:
     def __init__(self):
@@ -27,7 +68,7 @@ class RedditSentimentAnalyzer:
         self.sentiment_analyzer = pipeline(
             "sentiment-analysis",
             model="cardiffnlp/twitter-roberta-base-sentiment-latest",
-            device=DEVICE,
+            device=0 if DEVICE in ["cuda", "mps"] else -1,
             batch_size=MAX_BATCH_SIZE
         )
         
@@ -36,7 +77,7 @@ class RedditSentimentAnalyzer:
             self.emotion_analyzer = pipeline(
                 "text-classification",
                 model="j-hartmann/emotion-english-distilroberta-base",
-                device=DEVICE,
+                device=0 if DEVICE in ["cuda", "mps"] else -1,
                 batch_size=MAX_BATCH_SIZE
             )
             self.has_emotion = True
@@ -53,29 +94,25 @@ class RedditSentimentAnalyzer:
         """
         label_lower = label.lower()
         
-        # Direct mapping
         if 'positive' in label_lower or label == 'label_2':
             return 'positive', score
         elif 'negative' in label_lower or label == 'label_0':
             return 'negative', -score
-        else:  # neutral or label_1
+        else:
             return 'neutral', 0.0
 
     def analyze_comments_batch(self, comments_data):
         """Analyze multiple comments in batches for maximum GPU efficiency"""
         print(f"🚀 Starting batch sentiment analysis...")
         
-        # Prepare texts and metadata
-        texts = []
-        metadata = []
-        
+        texts, metadata = [], []
         for i, comment in enumerate(comments_data):
             text = comment.get('text', comment.get('body', '')) if isinstance(comment, dict) else str(comment)
             score = comment.get('score', 0) if isinstance(comment, dict) else 0
             post_title = comment.get('post_title', '') if isinstance(comment, dict) else ''
             comment_id = comment.get('id', f'comment_{i}') if isinstance(comment, dict) else f'comment_{i}'
             
-            if text and len(text.strip()) >= 10:  # Minimum 10 chars
+            if text and len(text.strip()) >= 10:
                 texts.append(text[:TRUNCATE_LENGTH])
                 metadata.append({
                     'id': comment_id,
@@ -89,15 +126,12 @@ class RedditSentimentAnalyzer:
             return []
         
         print(f"📊 Processing {len(texts)} comments in batches of {MAX_BATCH_SIZE}")
-        
         analyzed_comments = []
         
         try:
-            # Batch sentiment analysis
             print("🎭 Running sentiment analysis...")
             sentiment_results = self.sentiment_analyzer(texts)
             
-            # Optional emotion analysis
             emotion_results = None
             if self.has_emotion:
                 try:
@@ -106,16 +140,11 @@ class RedditSentimentAnalyzer:
                 except Exception as e:
                     print(f"⚠️ Emotion analysis failed: {e}")
             
-            # Process results
             for i, (sentiment_result, meta) in enumerate(zip(sentiment_results, metadata)):
-                # Extract sentiment
                 label = sentiment_result['label']
                 confidence = sentiment_result['score']
-                
-                # Map to standard labels
                 sentiment, compound = self._map_sentiment_label(label, confidence)
                 
-                # Build result
                 result = {
                     'id': meta['id'],
                     'text': texts[i],
@@ -126,7 +155,6 @@ class RedditSentimentAnalyzer:
                     'compound': round(compound, 4)
                 }
                 
-                # Add emotion if available
                 if emotion_results and i < len(emotion_results):
                     emotion = emotion_results[i]
                     result['emotion'] = {
@@ -155,7 +183,6 @@ class RedditSentimentAnalyzer:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # Extract comments from different JSON structures
             if 'comments' in data:
                 comments = data['comments']
             elif 'postsWithComments' in data:
@@ -165,22 +192,16 @@ class RedditSentimentAnalyzer:
                 return None
                 
             print(f"📝 Found {len(comments)} total comments")
-            
             if not comments:
                 print("⚠️ No comments to analyze")
                 return None
             
-            # GPU-Accelerated Batch Analysis
             analyzed_comments = self.analyze_comments_batch(comments)
-            
             if not analyzed_comments:
                 print("❌ No comments were successfully analyzed")
                 return None
             
-            # Calculate statistics
             total_analyzed = len(analyzed_comments)
-            
-            # Sentiment counts
             sentiment_counts = Counter(c['sentiment'] for c in analyzed_comments)
             sentiment_percentages = {
                 'positive': (sentiment_counts.get('positive', 0) / total_analyzed) * 100,
@@ -188,14 +209,12 @@ class RedditSentimentAnalyzer:
                 'neutral': (sentiment_counts.get('neutral', 0) / total_analyzed) * 100
             }
             
-            # Emotion counts (if available)
             emotion_counts = {}
             emotion_percentages = {}
             if analyzed_comments and 'emotion' in analyzed_comments[0]:
                 emotion_counts = Counter(c['emotion']['primary'] for c in analyzed_comments if 'emotion' in c)
                 emotion_percentages = {k: (v/total_analyzed)*100 for k, v in emotion_counts.items()}
             
-            # Get top comments
             top_positive = sorted(
                 [c for c in analyzed_comments if c['sentiment'] == 'positive'], 
                 key=lambda x: x['confidence'], 
@@ -208,28 +227,18 @@ class RedditSentimentAnalyzer:
                 reverse=True
             )[:10]
             
-            high_scoring = sorted(
-                analyzed_comments,
-                key=lambda x: x['score'],
-                reverse=True
-            )[:10]
+            high_scoring = sorted(analyzed_comments, key=lambda x: x['score'], reverse=True)[:10]
             
-            # Determine overall sentiment
             dominant_sentiment = max(sentiment_percentages, key=sentiment_percentages.get)
             sentiment_confidence = sentiment_percentages[dominant_sentiment]
             
-            # Build result
             analysis_result = {
                 'filename': os.path.basename(file_path),
                 'analyzed_at': datetime.now().isoformat(),
                 'query': data.get('metadata', {}).get('query', 'unknown'),
                 'total_comments_analyzed': total_analyzed,
                 'sentiment_breakdown': sentiment_percentages,
-                'raw_counts': {
-                    'positive': sentiment_counts.get('positive', 0),
-                    'negative': sentiment_counts.get('negative', 0),
-                    'neutral': sentiment_counts.get('neutral', 0)
-                },
+                'raw_counts': dict(sentiment_counts),
                 'overall_sentiment': dominant_sentiment,
                 'confidence': round(sentiment_confidence, 2),
                 'top_comments': {
@@ -242,7 +251,6 @@ class RedditSentimentAnalyzer:
                 'all_comments': analyzed_comments
             }
             
-            # Add emotion analysis if available
             if emotion_counts:
                 analysis_result['emotion_analysis'] = {
                     'summary': emotion_percentages,
@@ -250,7 +258,6 @@ class RedditSentimentAnalyzer:
                     'dominant_emotion': max(emotion_percentages, key=emotion_percentages.get)
                 }
             
-            # Print summary
             print(f"\n{'='*60}")
             print(f"✅ Analysis Complete!")
             print(f"{'='*60}")
@@ -266,7 +273,6 @@ class RedditSentimentAnalyzer:
                 print(f"\n😊 Dominant emotion: {dominant_emotion} ({emotion_percentages[dominant_emotion]:.1f}%)")
             
             print(f"{'='*60}\n")
-            
             return analysis_result
             
         except Exception as e:
@@ -297,14 +303,11 @@ class RedditSentimentAnalyzer:
         
         for idx, json_file in enumerate(json_files, 1):
             print(f"\n[{idx}/{len(json_files)}] Processing: {json_file}")
-            
             file_path = os.path.join(directory_path, json_file)
             analysis = self.analyze_json_file(file_path)
             
             if analysis:
                 all_analyses[json_file] = analysis
-                
-                # Save individual analysis
                 output_file = os.path.join(directory_path, f"sentiment_{json_file}")
                 with open(output_file, 'w', encoding='utf-8') as f:
                     json.dump(analysis, f, indent=2, ensure_ascii=False)
@@ -312,7 +315,6 @@ class RedditSentimentAnalyzer:
             else:
                 print(f"❌ Failed to analyze {json_file}")
         
-        # Save combined analysis
         if all_analyses:
             combined_output = os.path.join(directory_path, "combined_sentiment_analysis.json")
             with open(combined_output, 'w', encoding='utf-8') as f:
@@ -343,7 +345,6 @@ def main():
             print(f"📄 {filename}")
             print(f"   ├─ Comments: {analysis['total_comments_analyzed']:,}")
             print(f"   ├─ Sentiment: {analysis['overall_sentiment'].upper()} ({analysis['confidence']:.1f}%)")
-            
             sentiment = analysis['sentiment_breakdown']
             print(f"   └─ Breakdown: ✅ {sentiment['positive']:.1f}% | ❌ {sentiment['negative']:.1f}% | ⚪ {sentiment['neutral']:.1f}%\n")
     else:
