@@ -341,7 +341,7 @@ export default function AnalysisPage() {
                           ticks: {
                             color: '#F3F4F6',
                             stepSize: 20,
-                            callback: function(value) {
+                            callback: function (value) {
                               return value + '%';
                             }
                           },
@@ -368,115 +368,69 @@ export default function AnalysisPage() {
             )}
           </div>
 
-          {/* Bottom Charts Section */}
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            {/* Confidence Metrics Histogram */}
-            {sentimentData?.confidence_breakdown ? (
-              <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4">Confidence Distribution</h3>
-                <div className="h-64 flex items-center justify-center">
-                  <Bar
-                    data={{
-                      labels: Object.keys(sentimentData.confidence_breakdown),
-                      datasets: [{
-                        label: 'Percentage of Comments',
-                        data: Object.values(sentimentData.confidence_breakdown),
-                        backgroundColor: '#3B82F6',
-                        borderColor: '#2563EB',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                      }]
-                    }}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          display: false
-                        },
-                        tooltip: {
-                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                          titleColor: '#F3F4F6',
-                          bodyColor: '#F3F4F6',
-                          borderColor: 'rgba(255, 255, 255, 0.2)',
-                          borderWidth: 1,
-                          callbacks: {
-                            label: function (context) {
-                              const value = context.parsed.y;
-                              return `${value?.toFixed(1) || 0}% of comments`;
-                            }
-                          }
-                        }
-                      },
-                      scales: {
-                        x: {
-                          ticks: {
-                            color: '#F3F4F6',
-                            font: {
-                              size: 10
-                            }
-                          },
-                          grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                          },
-                          title: {
-                            display: true,
-                            text: 'Confidence Range',
-                            color: '#F3F4F6'
-                          }
-                        },
-                        y: {
-                          beginAtZero: true,
-                          ticks: {
-                            color: '#F3F4F6',
-                            stepSize: 1
-                          },
-                          grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                          },
-                          title: {
-                            display: true,
-                            text: 'Percentage of Comments',
-                            color: '#F3F4F6'
-                          }
-                        }
-                      }
-                    } as ChartOptions<'bar'>}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-6">
-                <h3 className="text-xl font-bold text-white mb-4">Confidence Distribution</h3>
-                <div className="h-64 flex items-center justify-center text-white/70">
-                  <p>Confidence data not available</p>
-                </div>
-              </div>
-            )}
 
-            {/* Empty space to maintain grid balance */}
-            <div></div>
-          </div>
 
-          {/* AI Summary Section - Moved Below */}
+          {/* AI Summary Section */}
           {sentimentData?.ai_summary?.paragraph_summary && (
             <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-2xl p-8 mb-8 shadow-2xl">
               <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-                🤖 AI Summary
+                🤖 AI Analysis Summary
               </h2>
-              <div className="text-white/90 leading-relaxed text-lg">
-                {sentimentData.ai_summary.paragraph_summary
-                  .split(/(?:\d+\.|\•|\-)\s+/)
-                  .filter(point => point.trim().length > 0)
-                  .map((point, index) => (
-                    <div key={index} className="mb-4 flex items-start gap-3">
-                      <div className="w-2 h-2 bg-cyan-400 rounded-full mt-3 flex-shrink-0"></div>
-                      <div className="text-white/90">{point.trim()}</div>
+              <div className="space-y-4">
+                {(() => {
+                  const summary = sentimentData.ai_summary.paragraph_summary;
+
+                  // Split by common bullet point patterns and clean up
+                  const points = summary
+                    .split(/(?:\d+\.|\•|\-|\.)\s+/)
+                    .map(point => point.trim())
+                    .filter(point => point.length > 20) // Filter out very short fragments
+                    .slice(0, 8); // Limit to 8 key points
+
+                  return points.map((point, index) => (
+                    <div key={index} className="flex items-start gap-4 p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-all duration-300">
+                      <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-white/90 leading-relaxed text-base">
+                          {point.replace(/^[^\w]*/, '').trim()}
+                        </p>
+                      </div>
                     </div>
-                  ))}
+                  ));
+                })()}
               </div>
-              <div className="mt-6 text-white/60 text-sm border-t border-white/10 pt-4">
-                Generated by {sentimentData.ai_summary?.model_used} • {new Date(sentimentData.ai_summary?.generated_at || '').toLocaleString()}
+
+              {/* Summary Stats */}
+              <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                  <div className="text-cyan-400 text-sm font-medium">Overall Sentiment</div>
+                  <div className="text-white text-xl font-bold capitalize">
+                    {sentimentData.overall_sentiment?.replace('_', ' ')}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                  <div className="text-cyan-400 text-sm font-medium">Comments Analyzed</div>
+                  <div className="text-white text-xl font-bold">
+                    {sentimentData.total_analyzed?.toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                  <div className="text-cyan-400 text-sm font-medium">Dominant Emotion</div>
+                  <div className="text-white text-xl font-bold capitalize">
+                    {sentimentData.dominant_emotion ?
+                      Object.entries(sentimentData.dominant_emotion)
+                        .sort(([, a], [, b]) => (b as number) - (a as number))[0]?.[0] || 'N/A'
+                      : 'N/A'
+                    }
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 text-white/60 text-sm border-t border-white/10 pt-4 flex items-center justify-between">
+                <span>Generated by {sentimentData.ai_summary?.model_used}</span>
+                <span>{new Date(sentimentData.ai_summary?.generated_at || '').toLocaleString()}</span>
               </div>
             </div>
           )}
