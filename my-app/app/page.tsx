@@ -4,16 +4,18 @@ import React, { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { Search, Menu, Cpu, LineChart, Zap } from "lucide-react";
-import Iridescence from "../components/Iridescence";
-import GooeyNav from "../components/GooeyNav";
-import Sidebar from "../components/Sidebar";
+import Iridescence from "@/components/Iridescence";
+import GooeyNav from "@/components/GooeyNav";
+import Sidebar from "@/components/Sidebar";
 import RevAiLoader from "@/components/RevAiLoader";
 import { motion } from "framer-motion";
 
+// 🧠 Supabase Client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
 const IRIDESCENCE_COLOR = [0.3, 0.6, 1];
 
 export default function Home() {
@@ -25,6 +27,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => setIsClient(true), []);
@@ -34,102 +37,103 @@ export default function Home() {
     const verifyUser = async () => {
       const { data } = await supabase.auth.getUser();
       if (!data?.user) router.push("/login");
-      else setUser(data.user);
+      else {
+        setUser(data.user);
+        fetchHistory(data.user.id);
+      }
     };
     verifyUser();
   }, [router]);
 
-  // 🔄 Listen to backend SSE progress
-  useEffect(() => {
-    if (!isLoading) return;
-    const evtSource = new EventSource("http://localhost:5000/api/progress-stream");
-
-    evtSource.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.stage) setProgressStage(data.stage);
-        if (data.current && data.total) {
-          const pct = Math.min(data.current / data.total, 1);
-          setProgressPercent(pct);
-        }
-      } catch {
-        console.warn("Malformed SSE event");
-      }
-    };
-
-    evtSource.onerror = () => {
-      console.warn("SSE connection lost.");
-      evtSource.close();
-    };
-
-    return () => evtSource.close();
-  }, [isLoading]);
-
-  // 🚀 Handle Reddit Search
-const handleSearch = useCallback(async () => {
-  const searchTerm = searchQuery.trim();
-  if (!searchTerm) return setError("Please enter a search query");
-
-  setError(null);
-  setIsLoading(true);
-  setProgressStage("Initializing...");
-  setProgressPercent(0);
-
-  try {
-    const BACKEND_URL =
-      process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
-
-    const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: searchTerm,
-        target_comments: 2000,
-        min_score: 2,
-      }),
-    });
-
-    if (!response.ok) throw new Error("Failed to fetch Reddit data");
-    const data = await response.json();
-
-    sessionStorage.setItem("reddit_data", JSON.stringify(data));
-    sessionStorage.setItem("search_query", searchTerm);
-
-    // 🧊 Step 1: Ensure the water fills fully
-    setProgressPercent(1); // fill to 100%
-    setProgressStage("Finalizing results");
-
-    // 🧊 Step 2: Keep loader animating a bit longer
-    await new Promise((resolve) => setTimeout(resolve, 1500)); // keep it visible while full
-
-    // 🧊 Step 3: Fade out + navigate
-    setIsLoading(false); // triggers fade-out in loader
-    await new Promise((resolve) => setTimeout(resolve, 800)); // allow fade-out
-    router.push("/analysis");
-  } catch (e: any) {
-    console.error(e);
-    setError(e.message || "An unexpected error occurred");
-    setIsLoading(false);
-  }
-}, [searchQuery, router]);
-
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !isLoading) {
-      e.preventDefault();
-      handleSearch();
-    }
+  // 🕓 Fetch user's saved searches
+  const fetchHistory = async (userId: string) => {
+    const { data, error } = await supabase
+      .from("search_history")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    if (!error && data) setHistory(data);
   };
 
-  const items = [
-    { label: "Home", href: "#" },
-    { label: "About", href: "./about" },
-    { label: "Contact", href: "./contact" },
-  ];
+  // 💾 Save search (no duplicates, overwrites old)
+  const saveSearch = async (query: string, data: any) => {
+    if (!user) return;
+    await supabase
+      .from("search_history")
+      .upsert(
+        [
+          {
+            user_id: user.id,
+            query,
+            reddit_data: data,
+          },
+        ],
+        {
+          onConflict: "user_id,query",
+          ignoreDuplicates: false, // ensures overwrite
+        }
+      );
+    fetchHistory(user.id);
+  };
+
+  // 🚀 Handle Reddit Search
+  const handleSearch = useCallback(async () => {
+    const searchTerm = searchQuery.trim();
+    if (!searchTerm) return setError("Please enter a search query");
+
+    setError(null);
+    setIsLoading(true);
+    setProgressStage("Initializing...");
+    setProgressPercent(0);
+
+    try {
+      const BACKEND_URL =
+        process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
+
+      const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: searchTerm,
+          target_comments: 2000,
+          min_score: 2,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch Reddit data");
+      const data = await response.json();
+
+      // Store data in sessionStorage for /analysis page
+      sessionStorage.setItem("reddit_data", JSON.stringify(data));
+      sessionStorage.setItem("search_query", searchTerm);
+
+      // Save in Supabase
+      await saveSearch(searchTerm, data);
+
+      // Animate water loader
+      setProgressPercent(1);
+      setProgressStage("Finalizing results");
+      await new Promise((r) => setTimeout(r, 1500));
+      setIsLoading(false);
+      await new Promise((r) => setTimeout(r, 800));
+      router.push("/analysis");
+    } catch (e: any) {
+      console.error(e);
+      setError(e.message || "An unexpected error occurred");
+      setIsLoading(false);
+    }
+  }, [searchQuery, router, user]);
+
+  // 📦 When user selects from history
+  const handleHistorySelect = async (item: any) => {
+    sessionStorage.setItem("reddit_data", JSON.stringify(item.reddit_data));
+    sessionStorage.setItem("search_query", item.query);
+    router.push("/analysis");
+  };
 
   return (
     <>
-      {/* 🌊 Real-time Water Loader */}
+      {/* 🌊 Water Loader */}
       <RevAiLoader
         isVisible={isLoading}
         currentStage={progressStage}
@@ -137,7 +141,7 @@ const handleSearch = useCallback(async () => {
       />
 
       <main className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden text-white">
-        {/* 🌈 Animated Iridescent Background */}
+        {/* 🌈 Background */}
         <div className="absolute inset-0 -z-20">
           <Iridescence
             color={IRIDESCENCE_COLOR}
@@ -147,13 +151,17 @@ const handleSearch = useCallback(async () => {
           />
         </div>
 
-        {/* 🧊 Glass Navbar */}
+        {/* 🧊 Navbar */}
         <div className="absolute top-8 z-30 w-full px-8">
           <div className="flex justify-center items-center relative">
             <div className="backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] px-10 py-2">
               <div style={{ height: "40px", position: "relative" }}>
                 <GooeyNav
-                  items={items}
+                  items={[
+                    { label: "Home", href: "#" },
+                    { label: "About", href: "./about" },
+                    { label: "Contact", href: "./contact" },
+                  ]}
                   particleCount={15}
                   particleDistances={[90, 10]}
                   particleR={100}
@@ -190,28 +198,6 @@ const handleSearch = useCallback(async () => {
             AI-powered Reddit sentiment analysis — uncover insights instantly
           </p>
 
-          {/* ✨ Info Badges */}
-          <div className="flex flex-wrap justify-center gap-4 mb-10">
-            <div className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 border border-cyan-300/60 rounded-full backdrop-blur-md">
-              <Cpu className="w-4 h-4 text-cyan-200" />
-              <span className="text-sm font-semibold text-cyan-100">
-                Powered by Hugging Face
-              </span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-pink-500/20 border border-pink-300/60 rounded-full backdrop-blur-md">
-              <Zap className="w-4 h-4 text-pink-200" />
-              <span className="text-sm font-semibold text-pink-100">
-                Real-time Analysis
-              </span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 border border-purple-300/60 rounded-full backdrop-blur-md">
-              <LineChart className="w-4 h-4 text-purple-200" />
-              <span className="text-sm font-semibold text-purple-100">
-                Interactive Charts
-              </span>
-            </div>
-          </div>
-
           {/* 🔍 Search Input */}
           <form
             onSubmit={(e) => {
@@ -229,7 +215,6 @@ const handleSearch = useCallback(async () => {
                   placeholder="Search Reddit for sentiment analysis..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={handleKeyPress}
                   disabled={isLoading}
                   className="w-full pl-16 pr-20 py-5 rounded-full bg-white/25 backdrop-blur-2xl border border-white/40 text-black font-semibold placeholder-black/50 focus:outline-none shadow-xl text-lg transition-all duration-300 disabled:opacity-60"
                 />
@@ -252,19 +237,20 @@ const handleSearch = useCallback(async () => {
                     stroke="white"
                     className="w-5 h-5"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M17 8l4 4m0 0l-4 4m4-4H3"
+                    />
                   </svg>
                 )}
               </button>
             </div>
           </form>
 
-          {/* ⚠️ Error Alert */}
           {error && !isLoading && (
-            <div className="mt-6">
-              <div className="bg-red-500/10 border border-red-500/50 rounded-xl p-4 backdrop-blur-sm">
-                <p className="text-red-300 font-medium">{error}</p>
-              </div>
+            <div className="mt-6 bg-red-500/10 border border-red-500/50 rounded-xl p-4 backdrop-blur-sm">
+              <p className="text-red-300 font-medium">{error}</p>
             </div>
           )}
         </motion.div>
@@ -274,7 +260,7 @@ const handleSearch = useCallback(async () => {
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onSearchSelect={() => handleSearch()}
+        onSearchSelect={handleHistorySelect}
       />
     </>
   );
