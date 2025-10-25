@@ -4,9 +4,10 @@ import React, { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { MultiStepLoader } from "@/components/ui/multi-step-loader";
-import { Brain, Search } from "lucide-react";
+import { Search, Menu } from "lucide-react";
 import Iridescence from "../components/Iridescence";
 import GooeyNav from "../components/GooeyNav";
+import Sidebar from "../components/Sidebar";
 
 // 🧠 Supabase Setup
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -28,6 +29,8 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   const loadingStates = [
     { text: "Authenticating with Reddit API" },
@@ -40,26 +43,50 @@ export default function Home() {
   useEffect(() => {
     const verifyUser = async () => {
       const u = await getCurrentUser();
-      if (!u) router.push("/login");
+      if (!u) {
+        router.push("/login");
+      } else {
+        setUser(u);
+      }
     };
     verifyUser();
   }, [router]);
 
-  const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) {
+  const handleSearch = useCallback(async (query?: string) => {
+    const searchTerm = query || searchQuery.trim();
+    if (!searchTerm) {
       setError("Please enter a search query");
       return;
     }
+    
+    // Update search query if using history
+    if (query) {
+      setSearchQuery(query);
+    }
+    
     setIsLoading(true);
     setError(null);
     try {
+      // Save search to database
+      if (user) {
+        await fetch('/api/searches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            userEmail: user.email,
+            searchQuery: searchTerm,
+          }),
+        });
+      }
+
       const BACKEND_URL =
         process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
       const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: searchQuery.trim(),
+          query: searchTerm,
           target_comments: 10000,
           min_score: 5,
         }),
@@ -67,13 +94,13 @@ export default function Home() {
       if (!response.ok) throw new Error("Failed to fetch Reddit data");
       const processedData = await response.json();
       sessionStorage.setItem("reddit_data", JSON.stringify(processedData));
-      sessionStorage.setItem("search_query", searchQuery);
+      sessionStorage.setItem("search_query", searchTerm);
       router.push("/analysis");
     } catch (err: any) {
       setError(err.message || "An unexpected error occurred");
       setIsLoading(false);
     }
-  }, [searchQuery, router]);
+  }, [searchQuery, router, user]);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !isLoading) {
@@ -109,20 +136,33 @@ export default function Home() {
         </div>
 
         {/* 🧊 Slim Glass Navbar */}
-        <div className="absolute top-8 z-30 flex justify-center w-full">
-          <div className="backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] px-10 py-2">
-            <div style={{ height: "40px", position: "relative", width: "auto" }}>
-              <GooeyNav
-                items={items}
-                particleCount={15}
-                particleDistances={[90, 10]}
-                particleR={100}
-                initialActiveIndex={0}
-                animationTime={600}
-                timeVariance={300}
-                colors={[1, 2, 3, 1, 2, 3, 1, 4]}
-              />
+        <div className="absolute top-8 z-30 w-full px-8">
+          <div className="flex justify-center items-center relative">
+            {/* Centered Navigation */}
+            <div className="backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] px-10 py-2">
+              <div style={{ height: "40px", position: "relative", width: "auto" }}>
+                <GooeyNav
+                  items={items}
+                  particleCount={15}
+                  particleDistances={[90, 10]}
+                  particleR={100}
+                  initialActiveIndex={0}
+                  animationTime={600}
+                  timeVariance={300}
+                  colors={[1, 2, 3, 1, 2, 3, 1, 4]}
+                />
+              </div>
             </div>
+
+            {/* Menu Button - Positioned Absolutely to Left */}
+            {user && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="absolute left-0 backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] p-3 hover:bg-white/20 transition-all duration-300 group"
+              >
+                <Menu className="w-5 h-5 text-white group-hover:scale-110 transition-transform" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -191,6 +231,13 @@ export default function Home() {
           )}
         </div>
       </main>
+
+      {/* Sidebar */}
+      <Sidebar 
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onSearchSelect={handleSearch}
+      />
 
       <style jsx>{`
         @keyframes fade-in {
