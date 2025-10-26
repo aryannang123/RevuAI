@@ -26,6 +26,7 @@ CORS(app, supports_credentials=True)
 # Create directories
 os.makedirs("pre-process", exist_ok=True)
 os.makedirs("pre-process_sentiments", exist_ok=True)
+os.makedirs("saved_analyses", exist_ok=True)
 
 # Initialize Reddit fetcher
 fetcher = MultiAccountRedditFetcher()
@@ -154,8 +155,6 @@ def gemini_chat():
         Keep responses clear, confident, and under 150 words unless detailed analysis is requested.
         """
 
-
-
         print(f"📊 Prompt size: {len(prompt)} chars (optimized)")
         print(f"🔄 Current API rotation index: {gemini_generator.current_model_index}")
 
@@ -196,6 +195,78 @@ def reset_chat_session():
         
         return jsonify({"success": False, "message": "Session not found"})
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ==========================================================
+# 💾 SAVE ANALYSIS DATA TO FILE
+# ==========================================================
+@app.route("/api/analysis/save", methods=["POST"])
+def save_analysis_data():
+    """
+    Save complete analysis data to a file that can be retrieved later
+    Returns the file path for storage in Supabase
+    """
+    try:
+        data = request.get_json()
+        if not data or "query" not in data or "analysis_data" not in data:
+            return jsonify({"error": "Query and analysis_data are required"}), 400
+
+        query = data["query"]
+        analysis_data = data["analysis_data"]
+        
+        # Create analyses directory if it doesn't exist
+        os.makedirs("saved_analyses", exist_ok=True)
+        
+        # Create a sanitized filename
+        safe_query = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in query)
+        safe_query = safe_query.replace(' ', '_')[:50]  # Limit length
+        
+        # Use query-based filename (will overwrite if same query)
+        filename = f"analysis_{safe_query}.json"
+        filepath = os.path.join("saved_analyses", filename)
+        
+        # Save the complete analysis data
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(analysis_data, f, indent=2, ensure_ascii=False)
+        
+        print(f"✅ Saved analysis data to: {filepath}")
+        
+        return jsonify({
+            "success": True,
+            "filepath": filepath,
+            "filename": filename,
+            "message": "Analysis data saved successfully"
+        })
+        
+    except Exception as e:
+        print(f"❌ Error saving analysis data: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/analysis/load/<filename>", methods=["GET"])
+def load_analysis_data(filename):
+    """
+    Load saved analysis data from file
+    """
+    try:
+        # Security: ensure filename doesn't contain path traversal
+        safe_filename = os.path.basename(filename)
+        filepath = os.path.join("saved_analyses", safe_filename)
+        
+        if not os.path.exists(filepath):
+            return jsonify({"error": "Analysis file not found"}), 404
+        
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        print(f"✅ Loaded analysis data from: {filepath}")
+        
+        return jsonify(data)
+        
+    except Exception as e:
+        print(f"❌ Error loading analysis data: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -363,7 +434,7 @@ def health_check():
     return jsonify({
         "status": "ok",
         "service": "Reddit Feedback Analyzer + Gemini Chat",
-        "version": "4.2-optimized",
+        "version": "4.3-with-analysis-storage",
         "accounts": len(fetcher.accounts),
         "gemini_api_keys": len(gemini_generator.models) if gemini_generator else 0,
         "active_sessions": len(chat_sessions),
@@ -373,14 +444,15 @@ def health_check():
             "sentiment_analysis": sentiment_analyzer is not None,
             "gemini_chat": gemini_generator is not None,
             "session_management": True,
-            "api_key_rotation": True
+            "api_key_rotation": True,
+            "analysis_storage": True
         }
     })
 
 
 if __name__ == "__main__":
     print("=" * 80)
-    print("🚀 Reddit Feedback Analyzer API v4.2 (Optimized Gemini)")
+    print("🚀 Reddit Feedback Analyzer API v4.3 (With Analysis Storage)")
     print("=" * 80)
     print(f"✅ {len(fetcher.accounts)} Reddit account(s) loaded")
     print(f"✅ Relevance filtering enabled")
@@ -389,6 +461,7 @@ if __name__ == "__main__":
         print(f"✅ Gemini Chatbot Ready ({len(gemini_generator.models)} API keys)")
         print(f"✅ Session-based caching enabled")
         print(f"✅ API key rotation active")
+    print(f"✅ Analysis storage enabled")
     print("\nEndpoints:")
     print("  POST /api/reddit/fetch-mass-comments - Fetch comments (with filtering)")
     print("  GET  /api/sentiment/latest           - Get latest sentiment analysis")
@@ -396,6 +469,8 @@ if __name__ == "__main__":
     print("  GET  /api/files/list                 - List all data files")
     print("  POST /api/gemini/chat                - Gemini Q&A Chat (optimized)")
     print("  POST /api/gemini/reset-session       - Reset chat session")
+    print("  POST /api/analysis/save              - Save analysis data")
+    print("  GET  /api/analysis/load/<filename>   - Load saved analysis data")
     print("  GET  /health                         - Health check")
     print("=" * 80)
     print("Server starting on http://0.0.0.0:5000\n")

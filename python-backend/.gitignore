@@ -20,5 +20,6 @@ instance/
 .DS_Store
 
 #pre-process data
-/pre-process/*.json
-/pre-process_sentiments/*.json
+/saved_analyses/
+/pre-process/
+/pre-process_sentiments/

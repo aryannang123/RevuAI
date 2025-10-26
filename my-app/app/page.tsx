@@ -86,153 +86,177 @@ export default function Home() {
   }, [isLoading]);
 
   // 💾 Save search info (without analysis data for now)
-  const saveSearch = async (query: string) => {
-    if (!user) {
-      console.warn("⚠️ No user found, skipping search save");
-      return;
-    }
+const saveSearch = async (query: string, analysisData: any, analysisFilename: string) => {
+  if (!user) {
+    console.warn("⚠️ No user found, skipping search save");
+    return;
+  }
 
-    try {
-      console.log(`💾 Saving search to Supabase: ${query}`);
-      console.log(`👤 User ID: ${user.id}`);
-      console.log(`📧 User Email: ${user.email}`);
-      
-      // First, let's test if we can connect to Supabase at all
-      const { data: testData, error: testError } = await supabase
+  try {
+    console.log(`💾 Saving search to Supabase: ${query}`);
+    console.log(`👤 User ID: ${user.id}`);
+    console.log(`📧 User Email: ${user.email}`);
+    console.log(`📁 Analysis Filename: ${analysisFilename}`);
+    
+    // Test database connection
+    const { data: testData, error: testError } = await supabase
+      .from("searches")
+      .select("count", { count: "exact", head: true });
+    
+    if (testError) {
+      console.error("❌ Cannot access searches table:", testError);
+      console.log("💡 Make sure to run the SQL scripts in database/ folder");
+      throw new Error(`Table access failed: ${testError.message || JSON.stringify(testError)}`);
+    }
+    
+    console.log("✅ Searches table accessible");
+    
+    const searchData = {
+      user_id: user.id,
+      user_email: user.email,
+      search_query: query,
+      analysis_data: {
+        ...analysisData,
+        saved_filename: analysisFilename, // Store filename for backend retrieval
+        saved_at: new Date().toISOString()
+      },
+      status: "completed",
+    };
+    
+    console.log("📝 Data to insert/update");
+    
+    // Check if record already exists
+    const { data: existingRecord } = await supabase
+      .from("searches")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("search_query", query)
+      .single();
+    
+    let result, error;
+    
+    if (existingRecord) {
+      // Update existing record (overwrite)
+      console.log("🔄 Updating existing search record (overwriting)");
+      const updateResult = await supabase
         .from("searches")
-        .select("count", { count: "exact", head: true });
+        .update({
+          user_email: user.email,
+          analysis_data: searchData.analysis_data,
+          status: "completed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingRecord.id)
+        .select();
       
-      if (testError) {
-        console.error("❌ Cannot access searches table:", testError);
-        console.log("💡 Make sure to run the SQL scripts in database/ folder");
-        throw new Error(`Table access failed: ${testError.message || JSON.stringify(testError)}`);
-      }
-      
-      console.log("✅ Searches table accessible");
-      
-      const searchData = {
-        user_id: user.id,
-        user_email: user.email,
-        search_query: query,
-        analysis_data: null, // 🔄 Will be implemented later
-        status: "completed",
-      };
-      
-      console.log("📝 Data to insert:", searchData);
-      
-      // Check if record already exists
-      const { data: existingRecord } = await supabase
+      result = updateResult.data;
+      error = updateResult.error;
+    } else {
+      // Insert new record
+      console.log("➕ Inserting new search record");
+      const insertResult = await supabase
         .from("searches")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("search_query", query)
-        .single();
+        .insert([searchData])
+        .select();
       
-      let result, error;
-      
-      if (existingRecord) {
-        // Update existing record
-        console.log("🔄 Updating existing search record");
-        const updateResult = await supabase
-          .from("searches")
-          .update({
-            user_email: user.email,
-            analysis_data: null,
-            status: "completed",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingRecord.id)
-          .select();
-        
-        result = updateResult.data;
-        error = updateResult.error;
-      } else {
-        // Insert new record
-        console.log("➕ Inserting new search record");
-        const insertResult = await supabase
-          .from("searches")
-          .insert([searchData])
-          .select();
-        
-        result = insertResult.data;
-        error = insertResult.error;
-      }
-
-      if (error) {
-        console.error("❌ Supabase upsert error:", error);
-        console.error("❌ Error details:", JSON.stringify(error, null, 2));
-        throw new Error(`Upsert failed: ${error.message || JSON.stringify(error)}`);
-      }
-
-      console.log(`✅ Search saved to Supabase: ${query}`);
-      console.log("📊 Result:", result);
-      
-      // Notify sidebar (optional real-time refresh)
-      window.dispatchEvent(new Event("refreshHistory"));
-    } catch (error: any) {
-      console.error("❌ Error saving search to database:", error);
-      console.error("❌ Error type:", typeof error);
-      console.error("❌ Error message:", error?.message || "Unknown error");
-      console.error("❌ Full error object:", JSON.stringify(error, null, 2));
-      
-      // Don't throw the error - continue with the analysis even if DB save fails
-      console.log("🔄 Continuing with analysis despite database error");
+      result = insertResult.data;
+      error = insertResult.error;
     }
-  };
 
-  // 🚀 Handle Reddit Search
-  const handleSearch = useCallback(async () => {
-    const searchTerm = searchQuery.trim();
-    if (!searchTerm) return setError("Please enter a search query");
-
-    setError(null);
-    setIsLoading(true);
-    setProgressStage("Initializing...");
-    setProgressPercent(0);
-
-    try {
-      const BACKEND_URL =
-        process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
-
-      const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: searchTerm,
-          target_comments: 2000,
-          min_score: 2,
-        }),
-      });
-
-      if (!response.ok) throw new Error("Failed to fetch Reddit data");
-      const data = await response.json();
-
-      // Save locally for analysis page
-      sessionStorage.setItem("reddit_data", JSON.stringify(data));
-      sessionStorage.setItem("search_query", searchTerm);
-
-      // 💾 Save to Supabase (without analysis data for now)
-      console.log("🎯 About to save search to database...");
-      await saveSearch(searchTerm);
-      console.log("✅ Search save attempt completed");
-
-      // 🧊 Step 1: Fill progress to 100%
-      setProgressPercent(1);
-      setProgressStage("Finalizing results");
-
-      // 🧊 Step 2: Smooth finish animation
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setIsLoading(false);
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      // 🧊 Step 3: Go to analysis page
-      router.push("/analysis");
-    } catch (e: any) {
-      console.error(e);
-      setError(e.message || "An unexpected error occurred");
-      setIsLoading(false);
+    if (error) {
+      console.error("❌ Supabase upsert error:", error);
+      console.error("❌ Error details:", JSON.stringify(error, null, 2));
+      throw new Error(`Upsert failed: ${error.message || JSON.stringify(error)}`);
     }
-  }, [searchQuery, router, user]);
+
+    console.log(`✅ Search saved to Supabase: ${query}`);
+    console.log("📊 Result:", result);
+    
+    // Notify sidebar for real-time refresh
+    window.dispatchEvent(new Event("refreshHistory"));
+  } catch (error: any) {
+    console.error("❌ Error saving search to database:", error);
+    console.error("❌ Error type:", typeof error);
+    console.error("❌ Error message:", error?.message || "Unknown error");
+    console.error("❌ Full error object:", JSON.stringify(error, null, 2));
+    
+    // Continue with analysis despite database error
+    console.log("🔄 Continuing with analysis despite database error");
+  }
+};
+
+// 🚀 Handle Reddit Search
+const handleSearch = useCallback(async () => {
+  const searchTerm = searchQuery.trim();
+  if (!searchTerm) return setError("Please enter a search query");
+
+  setError(null);
+  setIsLoading(true);
+  setProgressStage("Initializing...");
+  setProgressPercent(0);
+
+  try {
+    const BACKEND_URL =
+      process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || "http://localhost:5000";
+
+    // Step 1: Fetch Reddit comments and sentiment analysis
+    const response = await fetch(`${BACKEND_URL}/api/reddit/fetch-mass-comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: searchTerm,
+        target_comments: 2000,
+        min_score: 2,
+      }),
+    });
+
+    if (!response.ok) throw new Error("Failed to fetch Reddit data");
+    const data = await response.json();
+
+    // Step 2: Save analysis data to backend file system
+    console.log("💾 Saving analysis data to backend...");
+    const saveResponse = await fetch(`${BACKEND_URL}/api/analysis/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: searchTerm,
+        analysis_data: data
+      }),
+    });
+
+    let analysisFilename = "";
+    if (saveResponse.ok) {
+      const saveResult = await saveResponse.json();
+      analysisFilename = saveResult.filename;
+      console.log(`✅ Analysis saved as: ${analysisFilename}`);
+    } else {
+      console.warn("⚠️ Failed to save analysis to backend");
+    }
+
+    // Step 3: Save locally for analysis page
+    sessionStorage.setItem("reddit_data", JSON.stringify(data));
+    sessionStorage.setItem("search_query", searchTerm);
+
+    // Step 4: Save to Supabase with analysis data
+    console.log("🎯 Saving to Supabase...");
+    await saveSearch(searchTerm, data, analysisFilename);
+    console.log("✅ Supabase save completed");
+
+    // Step 5: Finalize and navigate
+    setProgressPercent(1);
+    setProgressStage("Finalizing results");
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    setIsLoading(false);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    router.push("/analysis");
+  } catch (e: any) {
+    console.error(e);
+    setError(e.message || "An unexpected error occurred");
+    setIsLoading(false);
+  }
+}, [searchQuery, router, user]);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !isLoading) {
