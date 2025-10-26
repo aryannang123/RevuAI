@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { User, History, Search, Clock, ChevronRight, X } from "lucide-react";
+import { User, History, Search, Clock, ChevronRight, X, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -14,7 +14,7 @@ interface SearchHistory {
   search_query: string;
   created_at: string;
   status: string;
-  analysis_data?: any; // 🧠 JSON data from Supabase
+  analysis_data?: any;
 }
 
 interface SidebarProps {
@@ -28,8 +28,9 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
   const [user, setUser] = useState<any>(null);
   const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingSearch, setLoadingSearch] = useState<string | null>(null);
 
-  // 🧠 Fetch user + their search history
+  // Fetch user + their search history
   useEffect(() => {
     const fetchUserAndHistory = async () => {
       try {
@@ -56,7 +57,7 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
 
     if (isOpen) fetchUserAndHistory();
 
-    // Optional live-refresh support
+    // Live-refresh support
     const refreshListener = () => fetchUserAndHistory();
     window.addEventListener("refreshHistory", refreshListener);
     return () => window.removeEventListener("refreshHistory", refreshListener);
@@ -76,6 +77,39 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = "/login";
+  };
+
+  const handleSearchClick = async (search: SearchHistory) => {
+    try {
+      setLoadingSearch(search.id);
+
+      if (search.analysis_data) {
+        console.log("✅ Loading saved analysis from Supabase");
+        
+        // Store in sessionStorage for analysis page
+        sessionStorage.setItem("reddit_data", JSON.stringify(search.analysis_data));
+        sessionStorage.setItem("search_query", search.search_query);
+        
+        // Small delay for visual feedback
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Navigate to analysis page
+        onClose();
+        router.push("/analysis");
+      } else {
+        // No saved data - trigger new search
+        console.log("🔄 No saved data, triggering new search");
+        onClose();
+        onSearchSelect(search.search_query);
+      }
+    } catch (err) {
+      console.error("❌ Error loading search:", err);
+      // Fallback to new search
+      onClose();
+      onSearchSelect(search.search_query);
+    } finally {
+      setLoadingSearch(null);
+    }
   };
 
   if (!isOpen) return null;
@@ -163,40 +197,21 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
                     {searchHistory.slice(0, 10).map((search) => (
                       <div
                         key={search.id}
-                        onClick={() => {
-                          try {
-                            if (search.analysis_data) {
-                              // ✅ Load analysis data directly (when implemented)
-                              sessionStorage.setItem(
-                                "reddit_data",
-                                JSON.stringify(search.analysis_data)
-                              );
-                              sessionStorage.setItem(
-                                "search_query",
-                                search.search_query
-                              );
-                              router.push("/analysis");
-                            } else {
-                              // 🔄 Re-run analysis (current behavior)
-                              console.log(`🔄 Re-running analysis for: ${search.search_query}`);
-                              onSearchSelect(search.search_query);
-                            }
-                          } catch (err) {
-                            console.error("Error loading search:", err);
-                            // Fallback to re-running the search
-                            onSearchSelect(search.search_query);
-                          } finally {
-                            onClose();
-                          }
-                        }}
-                        className="group p-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 cursor-pointer transition-all duration-200"
+                        onClick={() => handleSearchClick(search)}
+                        className="group p-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 cursor-pointer transition-all duration-200 relative"
                       >
+                        {loadingSearch === search.id && (
+                          <div className="absolute inset-0 bg-white/5 rounded-lg flex items-center justify-center">
+                            <Loader2 className="w-5 h-5 text-white animate-spin" />
+                          </div>
+                        )}
+                        
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <p className="text-white font-medium truncate group-hover:text-blue-300 transition-colors">
                               {search.search_query}
                             </p>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <Clock className="w-3 h-3 text-white/40" />
                               <p className="text-white/60 text-xs">
                                 {formatDate(search.created_at)}
@@ -210,14 +225,18 @@ export default function Sidebar({ isOpen, onClose, onSearchSelect }: SidebarProp
                               >
                                 {search.status}
                               </span>
-                              {!search.analysis_data && (
+                              {search.analysis_data ? (
                                 <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
+                                  ✓ saved
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-500/20 text-orange-300">
                                   will re-run
                                 </span>
                               )}
                             </div>
                           </div>
-                          <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-white/60 transition-colors" />
+                          <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-white/60 transition-colors flex-shrink-0" />
                         </div>
                       </div>
                     ))}
