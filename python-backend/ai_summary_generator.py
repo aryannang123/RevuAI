@@ -198,6 +198,285 @@ class AISummaryGenerator:
         }
 
     # ================================================================
+    # 🔹 Developer Suggestions Generator (NEW)
+    # ================================================================
+    def generate_developer_suggestions(self, sentiment_data, query):
+        """Generate actionable developer suggestions based on negative feedback"""
+        print(f"🛠️ Gemini generating developer suggestions for: {query}")
+
+        metadata = sentiment_data.get('metadata', {})
+        total_comments = metadata.get('total_comments_analyzed', 0)
+        sentiment_breakdown = metadata.get('sentiment_breakdown', {})
+        raw_counts = metadata.get('raw_counts', {})
+
+        summary_data = sentiment_data.get('summary', {})
+        top_negative_comments = summary_data.get('top_negative_comments', [])[:10]  # More negative comments for better insights
+        
+        # Extract negative insights for context
+        negative_insights = self._extract_negative_insights(top_negative_comments, query)
+
+        prompt = self._create_developer_suggestions_prompt(
+            query, total_comments, sentiment_breakdown, raw_counts,
+            negative_insights, top_negative_comments
+        )
+
+        print("🔥 Generating Gemini developer suggestions...")
+        print(f"   Using API rotation (current index: {self.current_model_index})")
+
+        suggestions = self.generate_response(prompt)
+        
+        if suggestions.startswith("⚠️"):
+            print("⚠️ Developer suggestions generation failed")
+        else:
+            suggestions = self._clean_summary(suggestions)
+
+        return {
+            'developer_suggestions': suggestions,
+            'generated_at': datetime.now().isoformat(),
+            'model_used': 'google/gemini-2.5-flash',
+            'analysis_method': 'gemini_negative_feedback_analysis',
+            'negative_comments_analyzed': len(top_negative_comments),
+            'key_issues': negative_insights,
+            'api_accounts_available': len(self.models)
+        }
+
+    def _extract_negative_insights(self, negative_comments, query):
+        """Extract key issues from negative comments"""
+        insights = {'performance_issues': [], 'usability_problems': [], 'feature_requests': [], 'bugs_crashes': []}
+
+        keywords = {
+            'performance': ['slow', 'lag', 'freeze', 'crash', 'hang', 'performance', 'speed'],
+            'usability': ['confusing', 'difficult', 'hard to use', 'ui', 'ux', 'interface', 'navigation'],
+            'features': ['missing', 'need', 'want', 'should have', 'feature', 'add', 'include'],
+            'bugs': ['bug', 'error', 'broken', 'not working', 'issue', 'problem', 'glitch']
+        }
+
+        for c in negative_comments:
+            text = c.get('text', '').lower()
+            for category, words in keywords.items():
+                if any(word in text for word in words):
+                    if category == 'performance':
+                        insights['performance_issues'].append(category)
+                    elif category == 'usability':
+                        insights['usability_problems'].append(category)
+                    elif category == 'features':
+                        insights['feature_requests'].append(category)
+                    elif category == 'bugs':
+                        insights['bugs_crashes'].append(category)
+
+        # Remove duplicates and limit
+        for key in insights:
+            insights[key] = list(set(insights[key]))[:3]
+        
+        return insights
+
+    def _create_developer_suggestions_prompt(self, query, total_comments, sentiment_breakdown, raw_counts, negative_insights, negative_comments):
+        """Create prompt specifically for developer suggestions based on negative feedback"""
+        neg_pct = sentiment_breakdown.get('negative', 0)
+        very_neg_pct = sentiment_breakdown.get('very_negative', 0)
+        total_negative_pct = neg_pct + very_neg_pct
+
+        prompt = f"""
+You are a product intelligence assistant analyzing negative Reddit feedback
+to help developers identify what needs improvement in their product.
+
+Your goal is to translate user frustration, complaints, and low-sentiment comments
+into specific, actionable recommendations developers can implement.
+
+Use only the negative or frustrated user comments provided — ignore neutral or positive ones.
+
+STRUCTURE YOUR OUTPUT AS FOLLOWS:
+
+**DEVELOPER SUGGESTIONS**
+
+**PRIORITY FIXES:**
+• [Critical recurring issue mentioned in negative comments — describe the problem and suggest an actionable technical fix]
+• [User experience pain point causing frustration — propose a clear improvement]
+• [Performance, stability, or reliability issue frequently reported — give a direct optimization approach]
+• [Missing or broken feature users complain about — suggest how to fix or enhance it]
+
+**ENHANCEMENT OPPORTUNITIES:**
+• [UI/UX improvement that would reduce negative feedback — describe the exact change]
+• [Feature enhancement that addresses repeated user complaints — explain expected benefit]
+• [Quality-of-life adjustment that users would appreciate — give an actionable recommendation]
+• [Strategic or long-term fix to prevent future user dissatisfaction — propose an implementation idea]
+
+**GUIDELINES:**
+- Focus entirely on *negative or low-sentiment comments*.
+- Base insights strictly on what users said — avoid assumptions not supported by data.
+- Be concise (1–2 sentences per point).
+- Make each suggestion specific, measurable, and directly actionable by developers.
+- Avoid generic statements like “Improve performance” — be concrete (e.g., “Reduce app load time by optimizing image assets”).
+- Write in a professional tone suitable for a developer improvement report.
+"""
+
+        return prompt
+
+    # ================================================================
+    # 🔹 Combined Analysis Generator (COST OPTIMIZED)
+    # ================================================================
+    def generate_combined_analysis(self, sentiment_data, query):
+        """Generate both AI summary and developer suggestions in a single API call"""
+        print(f"🚀 Gemini generating combined analysis for: {query}")
+
+        metadata = sentiment_data.get('metadata', {})
+        total_comments = metadata.get('total_comments_analyzed', 0)
+        sentiment_breakdown = metadata.get('sentiment_breakdown', {})
+        overall_sentiment = metadata.get('overall_sentiment', 'neutral')
+        raw_counts = metadata.get('raw_counts', {})
+
+        summary_data = sentiment_data.get('summary', {})
+        top_positive_comments = summary_data.get('top_positive_comments', [])[:5]
+        top_negative_comments = summary_data.get('top_negative_comments', [])[:10]
+
+        # Extract insights for both analyses
+        insights = self._extract_insights(top_positive_comments, top_negative_comments, query)
+        negative_insights = self._extract_negative_insights(top_negative_comments, query)
+
+        prompt = self._create_combined_analysis_prompt(
+            query, total_comments, sentiment_breakdown, raw_counts,
+            overall_sentiment, insights, negative_insights, 
+            top_positive_comments, top_negative_comments
+        )
+
+        print("🔥 Generating combined Gemini analysis (1 API call)...")
+        print(f"   Using API rotation (current index: {self.current_model_index})")
+
+        response = self.generate_response(prompt)
+        
+        if response.startswith("⚠️"):
+            print("⚠️ Combined analysis generation failed")
+            return self._create_fallback_combined_analysis(query, total_comments, overall_sentiment)
+
+        # Parse the combined response
+        parsed_response = self._parse_combined_response(response)
+        
+        return {
+            'ai_summary': {
+                'paragraph_summary': parsed_response['summary'],
+                'generated_at': datetime.now().isoformat(),
+                'model_used': 'google/gemini-2.5-flash',
+                'analysis_method': 'gemini_combined_analysis',
+                'comments_analyzed': len(top_positive_comments) + len(top_negative_comments),
+                'key_insights': insights,
+                'api_accounts_available': len(self.models)
+            },
+            'developer_suggestions': {
+                'developer_suggestions': parsed_response['suggestions'],
+                'generated_at': datetime.now().isoformat(),
+                'model_used': 'google/gemini-2.5-flash',
+                'analysis_method': 'gemini_combined_analysis',
+                'negative_comments_analyzed': len(top_negative_comments),
+                'key_issues': negative_insights,
+                'api_accounts_available': len(self.models)
+            }
+        }
+
+    def _create_combined_analysis_prompt(self, query, total_comments, sentiment_breakdown, raw_counts,
+                                       overall_sentiment, insights, negative_insights, 
+                                       positive_comments, negative_comments):
+        """Create a single prompt for both summary and developer suggestions"""
+        pos_pct = sentiment_breakdown.get('positive', 0)
+        neg_pct = sentiment_breakdown.get('negative', 0)
+        neu_pct = sentiment_breakdown.get('neutral', 0)
+        total_negative_pct = neg_pct + sentiment_breakdown.get('very_negative', 0)
+
+        prompt = f"""
+You are a professional market research analyst and product consultant analyzing user feedback for {query}.
+
+**Data Overview:**
+- Total Comments: {total_comments}
+- Sentiment: {pos_pct:.1f}% Positive, {neg_pct:.1f}% Negative, {neu_pct:.1f}% Neutral
+- Overall: {overall_sentiment.title()}
+- Negative Feedback: {total_negative_pct:.1f}% of users expressed concerns
+
+**Sample Positive Comments:**
+{chr(10).join(f"- {c.get('text', '')[:100]}..." for c in positive_comments[:3] if c.get('text'))}
+
+**Sample Negative Comments:**
+{chr(10).join(f"- {c.get('text', '')[:100]}..." for c in negative_comments[:5] if c.get('text'))}
+
+**CRITICAL: You MUST format your response EXACTLY like this:**
+
+**USER INSIGHTS SUMMARY:**
+
+**POSITIVE INSIGHTS:**
+• [First positive insight based on the data - be specific and actionable]
+• [Second positive insight - focus on what users appreciate most]
+• [Third positive insight - highlight key strengths mentioned]
+• [Fourth positive insight - additional user satisfaction point]
+
+**NEGATIVE INSIGHTS:**
+• [First negative concern - be specific about user pain points]
+• [Second negative concern - focus on most common complaints]
+• [Third negative concern - highlight areas needing improvement]
+• [Fourth negative concern - additional user frustration point]
+
+**DEVELOPER SUGGESTIONS:**
+
+**PRIORITY FIXES:**
+• [High-impact issue that needs immediate attention - be specific and actionable]
+• [Critical user experience problem that's causing frustration - provide solution]
+• [Performance or stability issue mentioned frequently - suggest technical fix]
+• [Major feature gap that users are requesting - recommend implementation]
+
+**ENHANCEMENT OPPORTUNITIES:**
+• [User interface improvement based on feedback - specific UI/UX suggestion]
+• [Feature enhancement that would address common complaints - detailed recommendation]
+• [Quality of life improvement that users would appreciate - actionable suggestion]
+• [Long-term strategic improvement based on user needs - implementation approach]
+
+**INSTRUCTIONS:**
+- Base insights on the actual comments provided
+- Keep each point to 1-2 sentences maximum
+- Be specific and actionable, avoid generic statements
+- Focus on what users actually said, not just percentages
+- Developer suggestions should directly address issues mentioned in negative comments
+"""
+        return prompt
+
+    def _parse_combined_response(self, response):
+        """Parse the combined response into summary and suggestions"""
+        try:
+            # Split response into summary and suggestions sections
+            if "**DEVELOPER SUGGESTIONS:**" in response:
+                parts = response.split("**DEVELOPER SUGGESTIONS:**")
+                summary_part = parts[0].strip()
+                suggestions_part = "**DEVELOPER SUGGESTIONS:**" + parts[1].strip()
+            else:
+                # Fallback if format is different
+                summary_part = response[:len(response)//2]
+                suggestions_part = response[len(response)//2:]
+            
+            return {
+                'summary': summary_part,
+                'suggestions': suggestions_part
+            }
+        except Exception as e:
+            print(f"⚠️ Error parsing combined response: {e}")
+            return {
+                'summary': response[:len(response)//2],
+                'suggestions': response[len(response)//2:]
+            }
+
+    def _create_fallback_combined_analysis(self, query, total_comments, overall_sentiment):
+        """Create fallback analysis if API fails"""
+        return {
+            'ai_summary': {
+                'paragraph_summary': f"Analysis of {total_comments} comments about '{query}' shows {overall_sentiment.replace('_', ' ')} sentiment overall.",
+                'generated_at': datetime.now().isoformat(),
+                'model_used': 'fallback',
+                'error': 'API generation failed'
+            },
+            'developer_suggestions': {
+                'developer_suggestions': f"Based on user feedback analysis, consider addressing user concerns about {query}.",
+                'generated_at': datetime.now().isoformat(),
+                'model_used': 'fallback',
+                'error': 'API generation failed'
+            }
+        }
+
+    # ================================================================
     # 🔹 Insight Extraction Helpers
     # ================================================================
     def _extract_insights(self, positive_comments, negative_comments, query):

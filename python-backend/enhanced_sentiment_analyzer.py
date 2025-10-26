@@ -409,13 +409,13 @@ class EnhancedSentimentAnalyzer:
                 'all_comments': analyzed_comments
             }
             
-            # Generate AI summary using Gemini
-            print(f"🤖 Generating AI summary with Gemini...")
+            # Generate AI summary and developer suggestions using Gemini
+            print(f"🤖 Generating AI summary and developer suggestions with Gemini...")
             try:
                 from ai_summary_generator import AISummaryGenerator
                 ai_generator = AISummaryGenerator()
                 
-                # Prepare data for AI summary (convert to expected format)
+                # Prepare data for AI analysis (convert to expected format)
                 summary_data = {
                     'metadata': {
                         'total_comments_analyzed': total_analyzed,
@@ -433,14 +433,22 @@ class EnhancedSentimentAnalyzer:
                     }
                 }
                 
-                ai_summary = ai_generator.generate_paragraph_summary(summary_data, analysis_result['query'])
-                analysis_result['ai_summary'] = ai_summary
-                print(f"✅ AI summary generated successfully!")
+                # Generate combined AI analysis (summary + developer suggestions in one call)
+                combined_analysis = ai_generator.generate_combined_analysis(summary_data, analysis_result['query'])
+                analysis_result['ai_summary'] = combined_analysis['ai_summary']
+                analysis_result['developer_suggestions'] = combined_analysis['developer_suggestions']
+                print(f"✅ Combined AI analysis generated successfully (1 API call instead of 2)!")
                 
             except Exception as e:
-                print(f"⚠️ AI summary generation failed: {e}")
+                print(f"⚠️ AI analysis generation failed: {e}")
                 analysis_result['ai_summary'] = {
                     'paragraph_summary': f"Analysis of {total_analyzed} comments about '{analysis_result['query']}' shows {dominant_sentiment.replace('_', ' ')} sentiment overall.",
+                    'generated_at': datetime.now().isoformat(),
+                    'model_used': 'fallback',
+                    'error': str(e)
+                }
+                analysis_result['developer_suggestions'] = {
+                    'developer_suggestions': f"Based on negative feedback analysis, consider addressing user concerns about {analysis_result['query']}.",
                     'generated_at': datetime.now().isoformat(),
                     'model_used': 'fallback',
                     'error': str(e)

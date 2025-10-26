@@ -93,8 +93,9 @@ def gemini_chat():
                 with open(dataset_path, "r", encoding="utf-8") as f:
                     full_data = json.load(f)
                     
-                    # Extract only key metrics (not all comments)
+                    # Extract only key metrics (not all comments) + query for context
                     summary_data = {
+                        "query": full_data.get("query", "unknown product"),
                         "overall_sentiment": full_data.get("overall_sentiment"),
                         "total_comments_analyzed": full_data.get("total_comments_analyzed"),
                         "sentiment_breakdown_5class": full_data.get("sentiment_breakdown_5class"),
@@ -132,27 +133,40 @@ def gemini_chat():
              for msg in conversation_history[-6:]]
         )
 
-        # 🎯 Optimized prompt (dataset loaded once, not repeated)
-        prompt = f"""
-        You are an intelligent data analysis assistant with strong independent reasoning and analytical abilities.
+        # Extract product/query from dataset for context
+        product_context = "unknown product"
+        try:
+            if dataset_summary and dataset_summary != "No dataset available":
+                summary_data = json.loads(dataset_summary)
+                product_context = summary_data.get('query', 'unknown product')
+        except Exception as e:
+            print(f"⚠️ Error extracting product context: {e}")
+            pass
 
-        Use your own understanding, reasoning, and background knowledge (≈80%) to interpret the user's question, 
-        and use the dataset summary (≈20%) only as supporting evidence or to validate insights.
+        # 🎯 Improved prompt with explicit product context
+        prompt = f"""You are a data analysis assistant helping users understand Reddit sentiment analysis results.
 
-        DATASET SUMMARY (reference only if relevant):
-        {dataset_summary}
+ANALYSIS CONTEXT:
+- Product/Topic Being Analyzed: "{product_context}"
+- You are analyzing user discussions and feedback about {product_context}
 
-        RECENT CONVERSATION:
-        {conversation_snippet}
+DATASET SUMMARY:
+{dataset_summary}
 
-        USER QUESTION:
-        {user_message}
+RECENT CONVERSATION:
+{conversation_snippet}
 
-        Provide a thoughtful, well-reasoned answer grounded primarily in your own analysis.
-        Use the dataset only to support or verify conclusions, not to depend entirely on it.
-        When applicable, reference key numbers or trends briefly from the dataset.
-        Keep responses clear, confident, and under 150 words unless detailed analysis is requested.
-        """
+USER QUESTION: {user_message}
+
+IMPORTANT CONTEXT RULES:
+- When users say "this product", "this", "it", they are referring to "{product_context}"
+- Always replace vague references with the actual product name in your responses
+- Provide specific insights about {product_context} based on the sentiment data
+- Reference actual numbers and percentages from the dataset when relevant
+- Keep responses clear and under 150 words unless detailed analysis is requested
+
+Example: If user asks "what is this product?", respond with "This analysis is about {product_context}, based on Reddit user discussions and sentiment analysis."
+"""
 
 
 
@@ -264,6 +278,7 @@ def fetch_mass_comments():
                     'dominant_emotion': sentiment_result.get('emotion_breakdown', {}),
                     'confidence_breakdown': sentiment_result.get('confidence_breakdown', {}),
                     'ai_summary': sentiment_result.get('ai_summary', {}),
+                    'developer_suggestions': sentiment_result.get('developer_suggestions', {}),
                     'top_comments': sentiment_result.get('top_comments', {}),
                     'total_analyzed': sentiment_result.get('total_comments_analyzed', 0)
                 }
