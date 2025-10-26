@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Iridescence from "@/components/Iridescence";
-import GooeyNav from "@/components/GooeyNav";
+
 import GeminiChatbot from "@/components/GeminiChatbot";
 import { Pie, Bar } from 'react-chartjs-2';
 import {
@@ -126,10 +126,6 @@ export default function AnalysisPage() {
   }
 
   // ✅ After Loading
-  const items = [
-    ,
-    { label: "Generate Sugesstions for developers", href: "./dev_analysis" },
-  ];
 
   return (
     <main className="relative min-h-screen w-screen overflow-hidden text-white">
@@ -153,28 +149,14 @@ export default function AnalysisPage() {
         </button>
       </div>
 
-      {/* 🧊 Glass Navbar (Top Right) */}
+      {/* Developer Suggestions Button (Top Right) */}
       <div className="absolute top-8 right-8 z-40">
-        <div className="backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] px-8 py-2">
-          <div
-            style={{
-              height: "40px",
-              position: "relative",
-              width: "auto",
-            }}
-          >
-            <GooeyNav
-              items={items}
-              particleCount={15}
-              particleDistances={[90, 10]}
-              particleR={100}
-              initialActiveIndex={0}
-              animationTime={600}
-              timeVariance={300}
-              colors={[1, 2, 3, 1, 2, 3, 1, 4]}
-            />
-          </div>
-        </div>
+        <button
+          onClick={() => router.push("./dev_analysis")}
+          className="backdrop-blur-2xl bg-white/15 border border-white/30 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.15)] px-6 py-3 hover:bg-white/20 transition-all duration-300"
+        >
+          <span className="text-white font-medium">Generate Suggestions for Developers →</span>
+        </button>
       </div>
 
       {/* 🤖 Gemini Chatbot - Floating Button */}

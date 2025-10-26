@@ -302,3 +302,7 @@ html {
     transform: translateX(-25%) rotate(0deg);
   }
 }
+canvas {
+  filter: drop-shadow(0 4px 20px rgba(0, 255, 255, 0.1));
+  border-radius: 16px;
+}
