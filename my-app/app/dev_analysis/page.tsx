@@ -166,7 +166,7 @@ export default function DevAnalysisPage() {
                     {/* Enhancement Opportunities Section */}
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 mb-4">
-                        <div className="w-8 h-8 bg-gradient-to-r from-green-400 to-purple-500 rounded-full flex items-center justify-center">
+                        <div className="w-8 h-8 bg-gradient-to-r from-green-400 rounded-full flex items-center justify-center">
                           <span className="text-white font-bold text-sm">+</span>
                         </div>
                         <h3 className="text-xl font-bold text-green-400">Enhancement Opportunities</h3>
