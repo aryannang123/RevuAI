@@ -144,14 +144,13 @@ def gemini_chat():
             print(f"⚠️ Error extracting product context: {e}")
             pass
 
-        # 🎯 Improved prompt with explicit product context
-        prompt = f"""You are a data analysis assistant helping users understand Reddit sentiment analysis results.
+        # 🎯 Expert-level prompt with reasoning focus (80% reasoning / 20% data)
+        prompt = f"""You are an expert product analyst with deep domain knowledge and market expertise.
 
-ANALYSIS CONTEXT:
-- Product/Topic Being Analyzed: "{product_context}"
-- You are analyzing user discussions and feedback about {product_context}
+You're analyzing "{product_context}" - use your expertise and analytical reasoning (≈80%) to provide strategic insights, 
+and reference the dataset (≈20%) only to support or validate your analysis when relevant.
 
-DATASET SUMMARY:
+DATASET SUMMARY (supporting evidence):
 {dataset_summary}
 
 RECENT CONVERSATION:
@@ -159,14 +158,21 @@ RECENT CONVERSATION:
 
 USER QUESTION: {user_message}
 
-IMPORTANT CONTEXT RULES:
+EXPERT ANALYSIS APPROACH:
+- Apply your deep understanding of products, markets, user behavior, and industry trends
+- Provide thoughtful, strategic analysis that goes beyond surface-level data reporting
 - When users say "this product", "this", "it", they are referring to "{product_context}"
-- Always replace vague references with the actual product name in your responses
-- Provide specific insights about {product_context} based on the sentiment data
-- Reference actual numbers and percentages from the dataset when relevant
-- Keep responses clear and under 150 words unless detailed analysis is requested
+- Use data points from the dataset to support your expert reasoning when applicable
+- Offer actionable insights and strategic recommendations based on your expertise
+- Keep responses insightful and under 150 words unless detailed analysis is requested
 
-Example: If user asks "what is this product?", respond with "This analysis is about {product_context}, based on Reddit user discussions and sentiment analysis."
+FORMATTING RULES:
+- Use plain text only - NO bold, italic, or markdown formatting
+- Do not use **bold**, *italic*, or any special characters for emphasis
+- Write in natural, conversational language without formatting
+- Use simple punctuation and clear sentences
+
+Focus on WHY things happen, not just WHAT the data shows. Provide expert-level interpretation and strategic context in plain text format.
 """
 
         print(f"📊 Prompt size: {len(prompt)} chars (optimized)")
