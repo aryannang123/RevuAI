@@ -163,11 +163,12 @@ NEXT_PUBLIC_PYTHON_BACKEND_URL=http://localhost:5000
    - Sentiment breakdown charts
    - Emotion analysis
    - Top positive/negative comments
-   - AI-generated summary
+   - AI-generated summary(Positive and negative Insights based on data fetched)
+   - Developer suggestions(how to improvise on their product)
 
 ### 2. **Interactive AI Chat**
 - Ask questions about the analyzed product
-- Get strategic business insights (90% AI reasoning + 10% data)
+- Get strategic business insights (80% AI reasoning + 20% data)
 - Explore market trends and competitive analysis
 - Receive actionable recommendations
 
