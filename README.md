@@ -72,6 +72,7 @@ RevAI is a cutting-edge sentiment analysis platform that harnesses the power of 
 
 
 ###  Backend Setup
+```bash
 cd python-backend
 
 # Create virtual environment
@@ -83,6 +84,9 @@ venv\Scripts\activate
 # On macOS/Linux:
 # source venv/bin/activate
 
+# Upgrade pip (recommended)
+python -m pip install --upgrade pip
+
 # Install dependencies
 pip install -r requirements.txt
 
@@ -92,8 +96,9 @@ cp .env.example .env
 
 # Start backend server
 python app.py
+```
 
-###  Frontend Setup
+### Frontend Setup
 ```bash
 cd my-app
 
@@ -108,7 +113,7 @@ cp .env.local.example .env.local
 npm run dev
 ```
 
-###  Database Setup
+### Database Setup
 ```bash
 # Run SQL scripts in my-app/database/ folder in your Supabase dashboard
 # This creates the necessary tables for user sessions and search history
