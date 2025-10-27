@@ -72,19 +72,26 @@ RevAI is a cutting-edge sentiment analysis platform that harnesses the power of 
 
 
 ###  Backend Setup
-```bash
 cd python-backend
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+# source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Configure environment
-venv\Scripts\activate
+cp .env.example .env
 # Edit .env with your credentials (see Configuration section)
 
 # Start backend server
 python app.py
-```
 
 ###  Frontend Setup
 ```bash
