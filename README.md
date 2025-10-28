@@ -44,7 +44,7 @@ RevAI is a cutting-edge sentiment analysis platform that harnesses the power of 
 └─────────────────┘    └──────────────────┘           │
          │                       │                    │
          │              ┌──────────────────┐          │
-         └──────────────►│   Supabase DB    │          │
+         └─────────────►│   Supabase DB    │          │
                         │                  │          │
                         │ • User Sessions  │          │
                         │ • Search History │          │
